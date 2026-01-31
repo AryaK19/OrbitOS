@@ -151,12 +151,29 @@ class RemoteAgentApp:
         self._running = False
 
 
+def expand_env_vars(config):
+    """Recursively expand environment variables in config."""
+    if isinstance(config, dict):
+        return {k: expand_env_vars(v) for k, v in config.items()}
+    elif isinstance(config, list):
+        return [expand_env_vars(v) for v in config]
+    elif isinstance(config, str):
+        if config.startswith('${') and config.endswith('}'):
+            env_var = config[2:-1]
+            val = os.getenv(env_var)
+            return val if val is not None else config
+        return config
+    else:
+        return config
+
+
 async def main():
     """Main async entry point."""
     load_dotenv()
     
     try:
-        config = load_config()
+        config_raw = load_config()
+        config = expand_env_vars(config_raw)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         print("Please create config/config.yaml")

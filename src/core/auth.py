@@ -59,18 +59,21 @@ class AuthManager:
         }
     }
     
+    
     def __init__(
         self,
         whitelist: List[int],
         admin_users: List[int],
         user_users: List[int],
         readonly_users: List[int],
+        password: str = None,
         default_permission: str = "user"
     ):
         self.logger = get_logger()
         self.audit = AuditLogger()
         
         self.whitelist = set(whitelist)
+        self.password = password
         self.default_permission = PermissionLevel.from_string(default_permission)
         
         # Build user -> permission level mapping
@@ -95,6 +98,10 @@ class AuthManager:
     def is_whitelisted(self, user_id: int) -> bool:
         """Check if a user is in the whitelist."""
         return user_id in self.whitelist
+    
+    def verify_password(self, password: str) -> bool:
+        """Verify the provided password."""
+        return self.password and password == self.password
     
     def get_permission_level(self, user_id: int) -> PermissionLevel:
         """Get the permission level for a user."""
@@ -180,5 +187,6 @@ class AuthManager:
             admin_users=permissions.get('admin', []),
             user_users=permissions.get('user', []),
             readonly_users=permissions.get('readonly', []),
+            password=security.get('password'),
             default_permission=security.get('default_permission', 'user')
         )

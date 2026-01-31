@@ -84,6 +84,10 @@ class TelegramBridge:
         self.app.add_handler(CommandHandler("help", self._handle_help))
         self.app.add_handler(CommandHandler("send", self._handle_send_file))
         
+        # Auth commands
+        self.app.add_handler(CommandHandler("login", self._handle_login))
+        self.app.add_handler(CommandHandler("logout", self._handle_logout))
+        
         # All other messages go to OpenCode
         self.app.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND, 
@@ -96,7 +100,9 @@ class TelegramBridge:
             self.sessions[user_id] = {
                 'started': datetime.now(),
                 'message_count': 0,
-                'last_activity': datetime.now()
+                'last_activity': datetime.now(),
+                'authenticated': False,
+                'login_time': None
             }
         return self.sessions[user_id]
     
@@ -105,6 +111,77 @@ class TelegramBridge:
         session = self._get_session(user_id)
         session['message_count'] += 1
         session['last_activity'] = datetime.now()
+        
+    async def _handle_login(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /login <password>."""
+        user = update.effective_user
+        session = self._get_session(user.id)
+        
+        # Check if already authenticated and valid
+        if self._is_session_valid(session):
+            await update.message.reply_text("✅ You are already logged in.")
+            return
+            
+        # Get password from args
+        password = ' '.join(context.args).strip()
+        if not password:
+            await update.message.reply_text("usage: /login <password>")
+            return
+            
+        if self.mcp.auth.verify_password(password):
+            session['authenticated'] = True
+            session['login_time'] = datetime.now()
+            hours = self.mcp.config.get('security', {}).get('session_expiry_hours', 24)
+            await update.message.reply_text(f"✅ Login successful. Session valid for {hours} hours.")
+            self.logger.info(f"User {user.id} logged in successfully")
+        else:
+            await update.message.reply_text("❌ Invalid password.")
+            self.logger.warning(f"Failed login attempt by user {user.id}")
+
+    async def _handle_logout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /logout."""
+        user = update.effective_user
+        session = self._get_session(user.id)
+        
+        session['authenticated'] = False
+        session['login_time'] = None
+        
+        await update.message.reply_text("👋 Logged out.")
+    
+    def _is_session_valid(self, session: dict) -> bool:
+        """Check if session is authenticated and not expired."""
+        if not session.get('authenticated'):
+            return False
+            
+        login_time = session.get('login_time')
+        if not login_time:
+            return False
+            
+        expiry_hours = self.mcp.config.get('security', {}).get('session_expiry_hours', 24)
+        age = datetime.now() - login_time
+        
+        if age.total_seconds() > (expiry_hours * 3600):
+            return False
+            
+        return True
+
+    async def _check_auth(self, update: Update) -> bool:
+        """Check if user is whitelisted or has a valid session."""
+        user = update.effective_user
+        if self.mcp.auth.is_whitelisted(user.id):
+            return True
+        
+        session = self._get_session(user.id)
+        if self._is_session_valid(session):
+            return True
+        
+        await update.message.reply_text(
+            "🔒 **Authentication Required**\n\n"
+            "Please log in to use this command.\n"
+            "Use `/login <password>`.",
+            parse_mode='Markdown'
+        )
+        return False
     
     async def _handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start - Welcome and start fresh session."""
@@ -114,11 +191,20 @@ class TelegramBridge:
         if self.agent:
             self.agent.clear_context(user.id)
         
-        # Reset session
+        # Reset session but keep auth if valid
+        existing_auth = False
+        login_time = None
+        if user.id in self.sessions:
+            if self._is_session_valid(self.sessions[user.id]):
+                existing_auth = True
+                login_time = self.sessions[user.id].get('login_time')
+
         self.sessions[user.id] = {
             'started': datetime.now(),
             'message_count': 0,
-            'last_activity': datetime.now()
+            'last_activity': datetime.now(),
+            'authenticated': existing_auth,
+            'login_time': login_time
         }
         
         welcome_text = f"""<b>Welcome, {user.first_name}!</b>
@@ -140,8 +226,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
 
 <i>I remember our conversation context.</i>"""
         
-        if not self.mcp.auth.is_whitelisted(user.id):
-            welcome_text += "\n\n<b>Note:</b> You are not whitelisted."
+        if not self.mcp.auth.is_whitelisted(user.id) and not existing_auth:
+             welcome_text += "\n\n🔒 <b>Authentication Required</b>\nPlease use <code>/login password</code> to access."
         
         await update.message.reply_text(welcome_text, parse_mode='HTML')
     
@@ -153,11 +239,20 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         if self.agent:
             self.agent.clear_context(user.id)
         
-        # Reset session
+        # Reset session but keep auth
+        existing_auth = False
+        login_time = None
+        if user.id in self.sessions:
+             if self._is_session_valid(self.sessions[user.id]):
+                existing_auth = True
+                login_time = self.sessions[user.id].get('login_time')
+
         self.sessions[user.id] = {
             'started': datetime.now(),
             'message_count': 0,
-            'last_activity': datetime.now()
+            'last_activity': datetime.now(),
+            'authenticated': existing_auth,
+            'login_time': login_time
         }
         
         await update.message.reply_text(
@@ -201,6 +296,19 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             duration_str = f"{minutes}m {seconds}s"
         else:
             duration_str = f"{seconds}s"
+            
+        is_auth = self._is_session_valid(session) or self.mcp.auth.is_whitelisted(user.id)
+        auth_status = "✅ Authenticated" if is_auth else "🔒 Locked"
+        if session.get('login_time'):
+            expiry = self.mcp.config.get('security', {}).get('session_expiry_hours', 24)
+            expires_at = session['login_time'].timestamp() + (expiry * 3600)
+            remaining = expires_at - datetime.now().timestamp()
+            if remaining > 0:
+                 r_hours = int(remaining // 3600)
+                 r_mins = int((remaining % 3600) // 60)
+                 auth_status += f" (Expires in {r_hours}h {r_mins}m)"
+            else:
+                 auth_status += " (Expired)"
         
         status_text = f"""
 📊 **Session Info**
@@ -217,6 +325,7 @@ I'm your <b>Remote PC Agent</b> powered by AI.
 🔧 **Settings:**
 • Mode: {'🤖 Agent' if self.agent_mode else '⚡ Raw'}
 • OpenCode: {'✅ Active' if self.agent else '❌ Inactive'}
+• Status: {auth_status}
 
 💡 Use `/new` to start fresh or `/clear` to reset context.
         """
@@ -227,6 +336,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         """Handle /history - Show recent conversation."""
         user = update.effective_user
         
+        if not self._check_auth(update): return
+
         if not self.agent or user.id not in self.agent.contexts:
             await update.message.reply_text(
                 "📭 No conversation history yet.\n\nStart chatting to build context!",
@@ -258,6 +369,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         """Handle /models - List available AI models with inline buttons."""
         user = update.effective_user
         
+        if not self._check_auth(update): return
+
         if not self.agent:
             await update.message.reply_text("<b>Error:</b> Agent not available.", parse_mode='HTML')
             return
@@ -295,9 +408,16 @@ I'm your <b>Remote PC Agent</b> powered by AI.
     async def _handle_model_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle model selection button callback."""
         query = update.callback_query
+        user = query.from_user
+        
+        if not self.mcp.auth.is_whitelisted(user.id):
+             session = self._get_session(user.id)
+             if not self._is_session_valid(session):
+                  await query.answer("Auth required", show_alert=True)
+                  return
+
         await query.answer()
         
-        user = query.from_user
         model_id = query.data.replace("model:", "")
         
         if not self.agent:
@@ -337,6 +457,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         """Handle /model <id> - Set active AI model."""
         user = update.effective_user
         
+        if not self._check_auth(update): return
+
         if not self.agent:
             await update.message.reply_text("⚠️ Agent not available.")
             return
@@ -392,6 +514,18 @@ I'm your <b>Remote PC Agent</b> powered by AI.
     
     async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
+        user = update.effective_user
+        if not self.mcp.auth.is_whitelisted(user.id):
+            session = self._get_session(user.id)
+            if not self._is_session_valid(session):
+                  await update.message.reply_text(
+                       "🔒 **Authentication Required**\n\n"
+                       "Please log in to see available commands.\n"
+                       "Use `/login <password>`.",
+                       parse_mode='Markdown'
+                  )
+                  return
+
         help_text = """
 🤖 **Remote PC Agent Help**
 
@@ -412,6 +546,10 @@ I'm your <b>Remote PC Agent</b> powered by AI.
 • `/send <path>` - Send specific file
 • Or just ask: "Send me report.pdf"
 
+**Auth Commands:**
+• `/login <password>` - Log in
+• `/logout` - Log out
+
 **Tips:**
 • I remember context - refer to previous messages!
 • Say "send that file" after discussing one
@@ -421,6 +559,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
     
     async def _handle_send_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /send - Direct file send."""
+        if not self._check_auth(update): return
+
         filepath = ' '.join(context.args) if context.args else ''
         if not filepath:
             await update.message.reply_text(
@@ -438,8 +578,17 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         user = update.effective_user
         
         # Auth check
-        if not self.mcp.auth.is_whitelisted(user.id):
-            await update.message.reply_text("🚫 Not authorized.")
+        if not await self._check_auth(update):
+            # If they just sent a valid password as a message, try to log them in
+            if self.mcp.auth.verify_password(text):
+                session = self._get_session(user.id)
+                session['authenticated'] = True
+                session['login_time'] = datetime.now()
+                hours = self.mcp.config.get('security', {}).get('session_expiry_hours', 24)
+                await update.message.reply_text(f"✅ Login successful! Session valid for {hours} hours.")
+                self.logger.info(f"User {user.id} logged in via text message")
+                # Don't process the password as a command/prompt
+                return
             return
         
         # Update session
@@ -641,6 +790,32 @@ If no files found, explain why."""
         
         return False
     
+    async def _check_auth(self, update: Update) -> bool:
+        """
+        Check if user is allowed to proceed.
+        Returns: True if authorized, False (and replies) if not.
+        """
+        user = update.effective_user
+        
+        # 1. Check strict whitelist
+        if self.mcp.auth.is_whitelisted(user.id):
+            return True
+            
+        # 2. Check session authentication
+        session = self._get_session(user.id)
+        if self._is_session_valid(session):
+            return True
+            
+        # 3. Deny access
+        if session.get('login_time'):
+            # Expired
+            await update.message.reply_text("⌛ **Session Expired**\n\nPlease log in again: `/login <password>`", parse_mode='Markdown')
+        else:
+            # Never logged in
+            await update.message.reply_text("🔒 **Authentication Required**\n\nPlease log in: `/login <password>`", parse_mode='Markdown')
+            
+        return False
+
     async def setup_commands(self):
         """Set up bot command menu."""
         commands = [

@@ -19,6 +19,12 @@ security:
   
   # Default permission level for whitelisted users
   default_permission: "user"
+  
+  # Password for non-whitelisted users
+  password: "${AGENT_PASSWORD}"
+  
+  # Session expiry time in hours
+  session_expiry_hours: 24
 
 # Permission Levels (mapped to user IDs)
 permissions:

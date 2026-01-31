@@ -22,25 +22,44 @@ A comprehensive remote PC control system using FastMCP servers with Telegram as 
 ## 🛠️ Quick Setup
 
 ### 1. Create a Telegram Bot
-
-1. Open Telegram and message [@BotFather](https://t.me/botfather)
-2. Send `/newbot` and follow prompts
-3. Save the bot token
+1. Open Telegram and search for **[@BotFather](https://t.me/botfather)**.
+2. Click **Start** or send `/start`.
+3. Send `/newbot` to create a new bot.
+4. Follow the prompts:
+   - **Name**: Choose a display name (e.g., "My Remote Agent").
+   - **Username**: Choose a unique username ending in `bot` (e.g., `MyRemotePC_bot`).
+5. **Copy the HTTP API Token** provided by BotFather. You will need this for the `TELEGRAM_BOT_TOKEN`.
 
 ### 2. Get Your Telegram User ID
+1. Search for **[@userinfobot](https://t.me/userinfobot)** on Telegram.
+2. Click **Start**.
+3. It will reply with your details. Copy the `Id` number (e.g., `123456789`). This is for the whitelist.
 
-1. Message [@userinfobot](https://t.me/userinfobot)
-2. Note your user ID number
+### 3. Get a GitHub Personal Access Token
+To use the GitHub features of the agent:
+1. Go to **[GitHub Developer Settings > Personal Access Tokens > Tokens (classic)](https://github.com/settings/tokens)**.
+2. Click **Generate new token** > **Generate new token (classic)**.
+3. **Note**: Give it a name like "Remote Agent".
+4. **Select Scopes**:
+   - `repo` (Full control of private repositories)
+   - `workflow` (Update GitHub Action workflows)
+   - `read:user` (Read user profile data)
+5. Click **Generate token**.
+6. **Copy the token** immediately. You verify won't see it again. this will be your `GITHUB_TOKEN`.
 
-### 3. Configure the System
+### 4. Configure the System
 
 Create a `.env` file in the project root:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your_bot_token_here
+GITHUB_TOKEN=your_github_token_here  # Optional, for GitHub features
+AGENT_PASSWORD=strong_password_here  # Optional, defaults to "changeme"
 ```
 
-Or update `config/config.yaml` directly:
+Or update `config/config.yaml` directly.
+
+### 5. Install Dependencies
 
 ```yaml
 telegram:
@@ -61,7 +80,7 @@ permissions:
 pip install -r requirements.txt
 ```
 
-### 5. Run the Agent
+### 6. Run the Agent
 
 ```bash
 python -m src.main
