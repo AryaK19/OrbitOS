@@ -1,0 +1,91 @@
+# Remote MCP Control System Configuration
+
+# Agent Settings (OpenCode Integration)
+agent:
+  enabled: true
+  timeout: 120  # seconds
+  working_dir: "C:/Users/arya2"  # Default working directory
+  model: "github-copilot/gpt-4o"  # Uncomment to specify model
+
+# Telegram Bot Settings
+telegram:
+  token: "${TELEGRAM_BOT_TOKEN}"  # Set via environment variable or replace here
+  
+# Security Settings
+security:
+  # Whitelist of allowed Telegram user IDs
+  whitelist:
+    - 1112461745  # Replace with your Telegram user ID
+  
+  # Default permission level for whitelisted users
+  default_permission: "user"
+
+# Permission Levels (mapped to user IDs)
+permissions:
+  admin:
+    - 1112461745  # Replace with admin user IDs
+  user: []
+  readonly: []
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/agent.log"
+  max_size_mb: 10
+  backup_count: 5
+
+# Sandbox Settings
+sandbox:
+  # Allowed directories for file operations
+  allowed_paths:
+    - "C:/Users/arya2"
+    - "D:/"
+  
+  # Blocked commands (regex patterns)
+  blocked_commands:
+    - "rm -rf /"
+    - "format"
+    - "del /s /q C:"
+    - "shutdown"
+    - "restart"
+  
+  # Python execution settings
+  python:
+    timeout_seconds: 30
+    blocked_imports:
+      - "os.system"
+      - "subprocess"
+      - "shutil.rmtree"
+
+# MCP Server Settings
+mcp:
+  name: "RemoteAgentMCP"
+  version: "1.0.0"
+  host: "localhost"
+  port: 8765
+
+# Tool Settings
+tools:
+  shell:
+    default_timeout: 60
+    max_output_length: 4000
+  
+  files:
+    max_file_size_mb: 100
+    allowed_extensions:
+      - ".txt"
+      - ".py"
+      - ".json"
+      - ".yaml"
+      - ".md"
+      - ".log"
+      - ".pdf"
+      - ".docx"
+  
+  apps:
+    shortcuts:
+      notepad: "notepad.exe"
+      browser: "start chrome"
+      vscode: "code"
+      explorer: "explorer.exe"
+      terminal: "wt.exe"

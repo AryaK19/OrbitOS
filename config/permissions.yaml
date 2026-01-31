@@ -1,0 +1,70 @@
+# Permission Level Definitions
+
+# Permission levels define what actions users can perform
+levels:
+  admin:
+    description: "Full system access"
+    capabilities:
+      - shell_execute
+      - file_read
+      - file_write
+      - file_delete
+      - app_launch
+      - python_execute
+      - system_info
+      - process_manage
+      - config_modify
+    path_restrictions: false  # No path restrictions
+    command_restrictions: false  # Minimal command restrictions
+
+  user:
+    description: "Standard user access"
+    capabilities:
+      - shell_execute  # Limited commands
+      - file_read
+      - file_write
+      - app_launch
+      - python_execute
+      - system_info
+    path_restrictions: true  # Only allowed paths
+    command_restrictions: true  # Blocked dangerous commands
+
+  readonly:
+    description: "Read-only access"
+    capabilities:
+      - file_read
+      - system_info
+    path_restrictions: true
+    command_restrictions: true
+
+# Command whitelists per permission level
+command_whitelist:
+  user:
+    - "echo"
+    - "dir"
+    - "ls"
+    - "cat"
+    - "type"
+    - "pwd"
+    - "cd"
+    - "ping"
+    - "ipconfig"
+    - "systeminfo"
+    - "tasklist"
+    - "python"
+    - "pip"
+    - "git"
+    - "npm"
+    - "node"
+
+# Capability descriptions
+capability_descriptions:
+  shell_execute: "Execute shell/terminal commands"
+  file_read: "Read file contents"
+  file_write: "Write/modify files"
+  file_delete: "Delete files and directories"
+  app_launch: "Launch applications"
+  python_execute: "Execute Python code"
+  system_info: "View system information"
+  process_manage: "Manage running processes"
+  config_modify: "Modify system configuration"
