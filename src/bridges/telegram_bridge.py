@@ -951,12 +951,15 @@ If no files found, explain why."""
         """Set up bot command menu."""
         commands = [
             BotCommand("start", "🚀 Start fresh"),
+            BotCommand("code", "💻 Coding Mode"),
             BotCommand("new", "🆕 New conversation"),
             BotCommand("clear", "🧹 Clear context"),
             BotCommand("models", "🤖 List AI models"),
             BotCommand("model", "🔄 Change model"),
             BotCommand("session", "📊 Session info"),
             BotCommand("history", "📜 View history"),
+            BotCommand("login", "🔓 Log in"),
+            BotCommand("logout", "🔒 Log out"),
             BotCommand("help", "❓ Help"),
             BotCommand("send", "📁 Send file"),
         ]
