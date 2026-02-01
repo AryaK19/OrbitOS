@@ -88,12 +88,22 @@ class TelegramBridge:
         self.app.add_handler(CommandHandler("login", self._handle_login))
         self.app.add_handler(CommandHandler("logout", self._handle_logout))
         
+        # Code Mode commands
+        self.app.add_handler(CommandHandler("code", self._handle_code_mode))
+        self.app.add_handler(CommandHandler("exit", self._handle_exit_code_mode))
+        
         # All other messages go to OpenCode
         self.app.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND, 
             self._handle_message
         ))
     
+    # Session States
+    STATE_NORMAL = "normal"
+    STATE_WAITING_DIR = "waiting_dir"
+    STATE_WAITING_GOAL = "waiting_goal"
+    STATE_CODING = "coding"
+
     def _get_session(self, user_id: int) -> dict:
         """Get or create session for a user."""
         if user_id not in self.sessions:
@@ -102,7 +112,11 @@ class TelegramBridge:
                 'message_count': 0,
                 'last_activity': datetime.now(),
                 'authenticated': False,
-                'login_time': None
+                'login_time': None,
+                # /code mode state
+                'mode': self.STATE_NORMAL,
+                'project_dir': None,
+                'project_goal': None
             }
         return self.sessions[user_id]
     
@@ -147,6 +161,48 @@ class TelegramBridge:
         session['login_time'] = None
         
         await update.message.reply_text("👋 Logged out.")
+
+    async def _handle_code_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /code - Enter specialized coding mode."""
+        if not await self._check_auth(update): return
+        
+        user = update.effective_user
+        session = self._get_session(user.id)
+        
+        # Reset coding state
+        session['mode'] = self.STATE_WAITING_DIR
+        session['project_dir'] = None
+        session['project_goal'] = None
+        
+        # Clear context so we start fresh for this task
+        if self.agent:
+            self.agent.clear_context(user.id)
+            
+        await update.message.reply_text(
+            "🚀 **Starting Coding Session**\n\n"
+            "I will help you plan and execute a coding task.\n"
+            "First, please enter the **project directory** (full absolute path).",
+            parse_mode='Markdown'
+        )
+
+    async def _handle_exit_code_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /exit - Exit coding mode."""
+        user = update.effective_user
+        session = self._get_session(user.id)
+        
+        if session['mode'] == self.STATE_NORMAL:
+            await update.message.reply_text("ℹ️ You are not in coding mode.")
+            return
+
+        session['mode'] = self.STATE_NORMAL
+        session['project_dir'] = None
+        session['project_goal'] = None
+        
+        await update.message.reply_text(
+            "⏹️ **Exited Coding Mode**\n\n"
+            "Returned to normal agent mode.",
+            parse_mode='Markdown'
+        )
     
     def _is_session_valid(self, session: dict) -> bool:
         """Check if session is authenticated and not expired."""
@@ -598,14 +654,87 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         if text.startswith('$') or text.startswith('>>>'):
             await self._execute_raw_and_reply(update, text)
             return
+            
+        # Check specific mode
+        session = self._get_session(user.id)
+        if session['mode'] != self.STATE_NORMAL:
+            await self._handle_code_flow(update, text, session)
+            return
         
         # Process with OpenCode
         if self.agent:
             await self._process_with_agent(update, text)
         else:
             await update.message.reply_text("⚠️ Agent not available.")
+
+    async def _handle_code_flow(self, update: Update, text: str, session: dict):
+        """Handle messages when in a specific state."""
+        mode = session['mode']
+        
+        if mode == self.STATE_WAITING_DIR:
+            # Validate directory
+            path = text.strip().strip('"\'')
+            if os.path.isdir(path):
+                session['project_dir'] = path
+                session['mode'] = self.STATE_WAITING_GOAL
+                await update.message.reply_text(
+                    f"📂 **Directory Set:** `{path}`\n\n"
+                    "Now, please describe the **task or goal** for this session.\n"
+                    "I will create a plan and we'll start.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ Invalid directory: `{path}`\n"
+                    "Please enter a valid absolute path."
+                )
+                
+        elif mode == self.STATE_WAITING_GOAL:
+            session['project_goal'] = text
+            session['mode'] = self.STATE_CODING
+            
+            # Trigger initial plan
+            goal = session['project_goal']
+            directory = session['project_dir']
+            
+            await update.message.reply_text(
+                f"🎯 **Goal Set:** {goal}\n\n"
+                "🧠 **Thinking...** generating initial plan..."
+            )
+            
+            initial_prompt = (
+                f"I am starting a new task.\n"
+                f"Goal: {goal}\n"
+                f"Please create a step-by-step implementation plan."
+            )
+            
+            # Pass to agent with special context
+            await self._process_with_agent(
+                update, 
+                initial_prompt, 
+                working_dir=directory,
+                system_context=f"Project: {goal}\nLocation: {directory}"
+            )
+            
+        elif mode == self.STATE_CODING:
+            # Normal conversation but with locked context
+            goal = session['project_goal']
+            directory = session['project_dir']
+            
+            await self._process_with_agent(
+                update, 
+                text, 
+                working_dir=directory,
+                system_context=f"Project: {goal}\nLocation: {directory}"
+            )
     
-    async def _process_with_agent(self, update: Update, text: str):
+    async def _process_with_agent(
+        self, 
+        update: Update, 
+        text: str, 
+        working_dir: str = None, 
+        system_context: str = None
+    ):
         """Process message through OpenCode agent."""
         user = update.effective_user
         
@@ -623,7 +752,9 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             result = await self.agent.process(
                 enhanced_text,
                 user.id,
-                user.username or str(user.id)
+                username=user.username or str(user.id),
+                working_dir=working_dir,
+                system_context=system_context
             )
             
             await status_msg.delete()
@@ -820,12 +951,15 @@ If no files found, explain why."""
         """Set up bot command menu."""
         commands = [
             BotCommand("start", "🚀 Start fresh"),
+            BotCommand("code", "💻 Coding Mode"),
             BotCommand("new", "🆕 New conversation"),
             BotCommand("clear", "🧹 Clear context"),
             BotCommand("models", "🤖 List AI models"),
             BotCommand("model", "🔄 Change model"),
             BotCommand("session", "📊 Session info"),
             BotCommand("history", "📜 View history"),
+            BotCommand("login", "🔓 Log in"),
+            BotCommand("logout", "🔒 Log out"),
             BotCommand("help", "❓ Help"),
             BotCommand("send", "📁 Send file"),
         ]

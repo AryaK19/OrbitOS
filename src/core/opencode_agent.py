@@ -150,7 +150,8 @@ class OpenCodeAgent:
         message: str, 
         user_id: int,
         username: str = "user",
-        working_dir: str = None
+        working_dir: str = None,
+        system_context: str = None
     ) -> str:
         """Process a message via OpenCode."""
         self.logger.info(f"Processing: {message[:50]}...")
@@ -161,7 +162,7 @@ class OpenCodeAgent:
         context.add_user_message(message)
         
         try:
-            prompt = self._build_prompt(message, context)
+            prompt = self._build_prompt(message, context, system_context)
             result = await self._run_opencode(prompt, working_dir or self.working_dir, user_id)
             
             context.add_assistant_message(result)
@@ -280,13 +281,19 @@ class OpenCodeAgent:
         clean_pattern = pattern.replace('*', '')
         return fnmatch.fnmatch(filename, pattern) or clean_pattern in filename
     
-    def _build_prompt(self, message: str, context: UserContext) -> str:
+    def _build_prompt(self, message: str, context: UserContext, system_context: str = None) -> str:
         """Build a simple prompt."""
         history = context.get_history_prompt()
         
-        return f"""{history}Request: {message}
-
-Execute the request. Be concise in your response."""
+        prompt_parts = []
+        if system_context:
+            prompt_parts.append(f"Context: {system_context}")
+            
+        prompt_parts.append(history)
+        prompt_parts.append(f"Request: {message}")
+        prompt_parts.append("\nExecute the request. Be concise in your response.")
+        
+        return "\n".join(prompt_parts)
     
     async def _run_opencode(self, prompt: str, cwd: str, user_id: int = None) -> str:
         """Run OpenCode CLI and stream output in real-time."""
