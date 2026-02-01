@@ -674,19 +674,31 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         if mode == self.STATE_WAITING_DIR:
             # Validate directory
             path = text.strip().strip('"\'')
-            if os.path.isdir(path):
-                session['project_dir'] = path
-                session['mode'] = self.STATE_WAITING_GOAL
+            
+            try:
+                # Try to create if it doesn't exist
+                if not os.path.exists(path):
+                    os.makedirs(path, exist_ok=True)
+                    await update.message.reply_text(f"✨ Created new directory: `{path}`", parse_mode='Markdown')
+                
+                if os.path.isdir(path):
+                    session['project_dir'] = path
+                    session['mode'] = self.STATE_WAITING_GOAL
+                    await update.message.reply_text(
+                        f"📂 **Directory Set:** `{path}`\n\n"
+                        "Now, please describe the **task or goal** for this session.\n"
+                        "I will create a plan and we'll start.",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"❌ Invalid directory: `{path}`\n"
+                        "Please enter a valid absolute path."
+                    )
+            except Exception as e:
                 await update.message.reply_text(
-                    f"📂 **Directory Set:** `{path}`\n\n"
-                    "Now, please describe the **task or goal** for this session.\n"
-                    "I will create a plan and we'll start.",
-                    parse_mode='Markdown'
-                )
-            else:
-                await update.message.reply_text(
-                    f"❌ Invalid directory: `{path}`\n"
-                    "Please enter a valid absolute path."
+                    f"❌ Could not create/access directory: `{path}`\n"
+                    f"Error: {str(e)}"
                 )
                 
         elif mode == self.STATE_WAITING_GOAL:
