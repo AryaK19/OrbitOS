@@ -4,7 +4,7 @@
 agent:
   enabled: true
   timeout: 120  # seconds
-  working_dir: "C:/Users/arya2"  # Default working directory
+  working_dir: "C:/Users/tejas"  # Default working directory
   model: "github-copilot/gpt-4o"  # Uncomment to specify model
 
 # Telegram Bot Settings
@@ -15,7 +15,7 @@ telegram:
 security:
   # Whitelist of allowed Telegram user IDs
   whitelist:
-    - 1112461745  # Replace with your Telegram user ID
+    - 8528595943  # Replace with your Telegram user ID
   
   # Default permission level for whitelisted users
   default_permission: "user"
@@ -29,7 +29,7 @@ security:
 # Permission Levels (mapped to user IDs)
 permissions:
   admin:
-    - 1112461745  # Replace with admin user IDs
+    - 8528595943  # Replace with admin user IDs
   user: []
   readonly: []
 
@@ -44,8 +44,8 @@ logging:
 sandbox:
   # Allowed directories for file operations
   allowed_paths:
-    - "C:/Users/arya2"
-    - "D:/"
+    - "C:/Users/tejas"
+    - "T:/"
   
   # Blocked commands (regex patterns)
   blocked_commands:
