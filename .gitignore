@@ -55,3 +55,7 @@ desktop.ini
 *.tmp
 *.temp
 *.bak
+
+.docx
+.pptx
+PPT_content.txt
