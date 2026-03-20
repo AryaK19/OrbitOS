@@ -101,12 +101,18 @@ class OpenCodeAgent:
     
     DEFAULT_MODEL = "google/antigravity-gemini-3-flash"
     
-    # Common locations to search for files
+    # Common locations to search for files (order matters — try most likely first)
     SEARCH_PATHS = [
         Path.home() / "Desktop",
-        Path.home() / "Documents", 
+        Path.home() / "OneDrive" / "Desktop",
+        Path.home() / "OneDrive - Personal" / "Desktop",
+        Path.home() / "Documents",
+        Path.home() / "OneDrive" / "Documents",
+        Path.home() / "OneDrive - Personal" / "Documents",
         Path.home() / "Downloads",
         Path.home() / "Pictures",
+        Path.home() / "OneDrive",
+        Path.home() / "OneDrive - Personal",
         Path.home(),
     ]
     
@@ -218,11 +224,12 @@ class OpenCodeAgent:
         # Extract location
         location = None
         loc_patterns = [
-            (r'(?:in|from|inside)\s+(?:my\s+)?desktop', 'Desktop'),
-            (r'(?:in|from|inside)\s+(?:my\s+)?documents?', 'Documents'),
+            (r'(?:in|from|inside|on)\s+(?:my\s+)?(?:one\s*drive\s+)?desktop', 'Desktop'),
+            (r'(?:in|from|inside)\s+(?:my\s+)?(?:one\s*drive\s+)?documents?', 'Documents'),
             (r'(?:in|from|inside)\s+(?:my\s+)?downloads?', 'Downloads'),
             (r'(?:in|from|inside)\s+(?:my\s+)?pictures?', 'Pictures'),
             (r'(?:in|from|inside)\s+(?:the\s+)?study', 'Documents/Study'),
+            (r'one\s*drive', 'OneDrive'),
         ]
         
         for pattern, loc in loc_patterns:
@@ -233,7 +240,7 @@ class OpenCodeAgent:
         return {'filename': filename, 'location': location}
     
     def _search_files(self, filename: str, location: str = None) -> List[str]:
-        """Search for files directly."""
+        """Search for files directly. Auto-expands to alternate paths if primary location missing."""
         found = []
         filename_lower = filename.lower().replace(' ', '*')
         
@@ -243,16 +250,32 @@ class OpenCodeAgent:
         else:
             search_pattern = filename_lower
         
-        # Determine search paths
+        # Determine search paths — expand to OneDrive equivalents automatically
         if location:
-            paths = [Path.home() / location]
+            # Build candidate paths: standard + OneDrive variants
+            candidates = [
+                Path.home() / location,
+                Path.home() / "OneDrive" / location,
+                Path.home() / "OneDrive - Personal" / location,
+            ]
+            # For "Desktop" specifically also try OneDrive root children
+            if location.lower() == "onedrive":
+                candidates = [
+                    Path.home() / "OneDrive",
+                    Path.home() / "OneDrive - Personal",
+                ]
+            paths = [p for p in candidates if p.exists()]
+            # If none found, fall back to full default search
+            if not paths:
+                self.logger.info(
+                    f"Location '{location}' not found at standard path — "
+                    f"falling back to full search across all known paths"
+                )
+                paths = [p for p in self.SEARCH_PATHS if p.exists()]
         else:
-            paths = self.SEARCH_PATHS
+            paths = [p for p in self.SEARCH_PATHS if p.exists()]
         
         for base_path in paths:
-            if not base_path.exists():
-                continue
-            
             # Search recursively (limited depth)
             try:
                 for root, dirs, files in os.walk(base_path):
@@ -267,10 +290,10 @@ class OpenCodeAgent:
                             full_path = os.path.join(root, file)
                             if full_path not in found:
                                 found.append(full_path)
+                    
+                    if len(found) >= 15:
+                        return found
                         
-                        if len(found) >= 15:
-                            return found
-                            
             except PermissionError:
                 continue
         
@@ -284,7 +307,7 @@ class OpenCodeAgent:
         return fnmatch.fnmatch(filename, pattern) or clean_pattern in filename
     
     def _build_prompt(self, message: str, context: UserContext, system_context: str = None) -> str:
-        """Build a simple prompt."""
+        """Build a prompt that encourages autonomous searching before asking the user."""
         history = context.get_history_prompt()
         
         prompt_parts = []
@@ -293,6 +316,16 @@ class OpenCodeAgent:
             
         prompt_parts.append(history)
         prompt_parts.append(f"Request: {message}")
+        prompt_parts.append(
+            "\nIMPORTANT: Before asking the user any questions, exhaustively try all likely "
+            "locations yourself. On Windows, if a standard path like Desktop does not exist, "
+            "automatically check OneDrive\\Desktop, OneDrive - Personal\\Desktop, and other "
+            "OneDrive variants. Search broadly and silently across all known paths first. "
+            "Only ask the user if every reasonable search has been exhausted. "
+            "IMPORTANT: List the FULL ABSOLUTE PATHS of matching files, one per line. "
+            "Start each path with the drive letter (e.g., C:\\\\Users\\\\...). "
+            "If no files found, explain why."
+        )
         prompt_parts.append("\nExecute the request. Be concise in your response.")
         
         return "\n".join(prompt_parts)
