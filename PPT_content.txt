@@ -1,0 +1,88 @@
+You are an expert presentation designer and AI researcher. Please generate a highly professional, 10-slide academic presentation based on the following research topic: "Secure and Extensible Remote System Administration via Large Language Model Agents using the Model Context Protocol (MCP)". 
+
+The presentation should have a clean, modern, and highly technical aesthetic, utilizing diagrams where appropriate. Please generate the content for the 10 slides using the detailed structure below. For each slide, provide the Title, Bullet Points (the text on the slide), and Speaker Notes (what I will actually say).
+
+---
+
+### Slide 1: Title Slide
+*   **Title:** Secure Remote System Administration via LLM Agents
+*   **Subtitle:** Leveraging the Model Context Protocol (MCP) for Safe Autonomous Execution
+*   **Visual Suggestion:** A sleek, abstract visualization of an AI brain connecting to a server tower via a secure, glowing bridge.
+
+### Slide 2: The Core Challenge
+*   **Title:** The "M x N" Integration & Security Problem
+*   **Bullet Points:**
+    *   LLMs require bespoke adapters for every new tool or dataset.
+    *   Natural language interfaces lack semantic connection to host OS binaries.
+    *   Catastrophic Risk: Autonomous models hallucinating or falling victim to prompt injection, leading to Arbitrary Code Execution (ACE).
+*   **Speaker Notes:** Highlight that while LLMs are smart, connecting them to actual operating systems is dangerous and fragmented. Every new model needs a new API connector, and giving an LLM `eval()` access is a textbook security vulnerability.
+
+### Slide 3: The Solution: Model Context Protocol
+*   **Title:** The Model Context Protocol (MCP)
+*   **Bullet Points:**
+    *   Anthropic’s open-source standard for AI tool integration (released Nov 2024).
+    *   Acts as a "USB-C port for AI"—standardizing JSON-RPC communication.
+    *   Wraps stateless RPC in a stateful session protocol.
+    *   Exposes three primitives: Tools, Resources, and Prompts.
+*   **Speaker Notes:** Introduce MCP. Explain that rather than writing a custom Telegram bot block for every OS command, we write a universal FastMCP server that exposes tools in a schema the LLM natively understands.
+
+### Slide 4: System Architecture
+*   **Title:** Three-Pillar Modular Architecture
+*   **Bullet Points:**
+    *   **Telegram Bridge:** Encrypted mobile UI, user authentication, session context.
+    *   **OpenCode Agent:** The semantic "brain" wrapping CLI logic; translates natural language to JSON-RPC.
+    *   **FastMCP Server:** The local execution engine and ultimate security gatekeeper.
+*   **Visual Suggestion:** A clean 3-block flowchart showing Telegram -> OpenCode Agent -> MCP Server (with an explicit Sandbox boundary before the Host OS).
+
+### Slide 5: The FastMCP Toolset
+*   **Title:** Granular Administrative Capabilities
+*   **Bullet Points:**
+    *   *Shell Commands:* Captures `stdout`/`stderr` for LLM consumption.
+    *   *File Operations:* Recursive directory listing, secure file I/O.
+    *   *Python Execution:* Dynamic script execution for complex automation.
+    *   *System Monitoring:* Asynchronous telemetry (CPU, RAM, PID states).
+*   **Speaker Notes:** Emphasize that these aren't just rigid scripts; the LLM knows how these tools work via strict JSON schemas and can chain them together autonomously.
+
+### Slide 6: Security Layer 1 - Authentication
+*   **Title:** Cryptographic Whitelisting & Identity
+*   **Bullet Points:**
+    *   Connections strictly bound to Telegram User IDs.
+    *   Hierarchical Permissions: `readonly`, `user`, `admin`.
+    *   *Readonly:* Telemetry only. *User:* Safe shells. *Admin:* System modification.
+*   **Speaker Notes:** Telegram bots aren't natively End-to-End Encrypted (E2EE) against the provider, so we have to enforce absolute zero-trust identity checks on the host server before any prompt even reaches the LLM.
+
+### Slide 7: Security Layer 2 - Execution Sandboxing
+*   **Title:** Mitigating Remote Code Execution (RCE)
+*   **Bullet Points:**
+    *   OS-level primitive proxies intercepting all `ShellTool` subprocesses.
+    *   Blacklisting destructive commands (`rm -rf`, `format`).
+    *   Ephemeral namespaces for dynamic Python execution.
+    *   Active Abstract Syntax Tree (AST) parsing to strip malicious `import os` statements.
+*   **Speaker Notes:** This is where the real security happens. Even if a prompt injection attack tricks the LLM into writing a Python script to exfiltrate data, our AST parser strips the network imports before the Python binary ever sees the code.
+
+### Slide 8: Real-World Results
+*   **Title:** System Performance & Adversarial Testing
+*   **Bullet Points:**
+    *   *Success:* Agent autonomously chains network profiling (`ipconfig`) with file parsing in under 5 seconds based on vague prompts.
+    *   *Defense:* Successful interception of injected `rm -rf /` commands.
+    *   *Alerting:* Sandbox failures immediately notify admins via Telegram without crashing the FastMCP loop.
+*   **Speaker Notes:** The system works. It translates vague human requests into deterministic JSON-RPC tool calls, and critically, it successfully defends against intentional red-team prompt injections during live testing.
+
+### Slide 9: Limitations & Complexities
+*   **Title:** Trade-offs: Flexibility vs. Complete Isolation
+*   **Bullet Points:**
+    *   Python execution remains a persistent vector for bypasses in highly dynamic environments.
+    *   Telegram Bot infrastructure necessitates trust in third-party transit layers.
+    *   *Future Paradigm:* Full-kernel virtualization (WebAssembly, Firecracker MicroVMs) is required for deterministic mathematical isolation.
+*   **Speaker Notes:** Be honest about the current state of AI security. Python is too dynamic to sandbox perfectly just using AST parsing. We discuss how true enterprise deployment requires hardware-level MicroVM isolation.
+
+### Slide 10: Conclusion & Roadmap
+*   **Title:** The Future of Remote Autonomous Administration
+*   **Bullet Points:**
+    *   MCP radically accelerates the deployment of capable administrative agents.
+    *   Multi-layered sandboxing proves effective against standard LLM hallucinations and injections.
+    *   *Roadmap:* Integrating GitHub/Enterprise Email plugins and migrating to a visual, metric-driven Web UI.
+*   **Visual Suggestion:** A futuristic dashboard implying the transition from a chat interface to a fully interactive Web UI for the agent.
+
+---
+Please output the 10 slides following this structure exactly.
