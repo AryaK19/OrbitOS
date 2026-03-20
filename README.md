@@ -217,3 +217,7 @@ This system allows remote command execution on your PC. Always:
 ## 📄 License
 
 MIT License
+
+## Updated_readme
+
+Last updated: Fri Mar 20 2026

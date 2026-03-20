@@ -260,7 +260,10 @@ class TelegramBridge:
             'message_count': 0,
             'last_activity': datetime.now(),
             'authenticated': existing_auth,
-            'login_time': login_time
+            'login_time': login_time,
+            'mode': self.STATE_NORMAL,
+            'project_dir': None,
+            'project_goal': None
         }
         
         welcome_text = f"""<b>Welcome, {user.first_name}!</b>
@@ -308,7 +311,10 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             'message_count': 0,
             'last_activity': datetime.now(),
             'authenticated': existing_auth,
-            'login_time': login_time
+            'login_time': login_time,
+            'mode': self.STATE_NORMAL,
+            'project_dir': None,
+            'project_goal': None
         }
         
         await update.message.reply_text(
