@@ -94,8 +94,10 @@ class RemoteAgentApp:
         
         if agent_enabled:
             try:
-                self.opencode_agent = OpenCodeAgent(agent_config)
-                self.logger.info("OpenCode Agent initialized ✓")
+                self.opencode_agent = OpenCodeAgent(
+                    agent_config, tool_registry=self.mcp_server.registry
+                )
+                self.logger.info("OrbitAgent (LangGraph) initialized ✓")
             except Exception as e:
                 self.logger.warning(f"Failed to initialize OpenCode Agent: {e}")
                 self.logger.info("Running in raw mode only")
@@ -125,7 +127,7 @@ class RemoteAgentApp:
             self.logger.info("=" * 50)
             self.logger.info("🚀 Remote Agent is now LIVE!")
             self.logger.info("Send messages to your Telegram bot")
-            self.logger.info("Mode: " + ("🤖 AGENT (OpenCode)" if self.opencode_agent else "⚡ RAW"))
+            self.logger.info("Mode: " + ("🤖 AGENT (LangGraph)" if self.opencode_agent else "⚡ RAW"))
             self.logger.info("=" * 50)
             
             while self._running:
@@ -156,12 +158,25 @@ def expand_env_vars(config):
     if isinstance(config, dict):
         return {k: expand_env_vars(v) for k, v in config.items()}
     elif isinstance(config, list):
-        return [expand_env_vars(v) for v in config]
+        result = []
+        for v in config:
+            expanded = expand_env_vars(v)
+            # If an env var contained commas, split into multiple list entries
+            if isinstance(expanded, str) and ',' in expanded and v != expanded:
+                result.extend(p.strip() for p in expanded.split(',') if p.strip())
+            else:
+                result.append(expanded)
+        return result
     elif isinstance(config, str):
         if config.startswith('${') and config.endswith('}'):
             env_var = config[2:-1]
             val = os.getenv(env_var)
-            return val if val is not None else config
+            if val is None:
+                return config
+            # Convert numeric strings to int (e.g. user IDs)
+            if val.isdigit():
+                return int(val)
+            return val
         return config
     else:
         return config

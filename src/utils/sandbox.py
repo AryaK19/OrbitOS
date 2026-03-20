@@ -40,11 +40,17 @@ class Sandbox:
             # Default safe configuration
             self.allowed_paths = [Path.home().resolve()]
             self.blocked_patterns = [
-                re.compile(r'rm\s+-rf\s+/', re.IGNORECASE),
-                re.compile(r'format\s+[a-z]:', re.IGNORECASE),
-                re.compile(r'del\s+/s\s+/q\s+[a-z]:', re.IGNORECASE),
+                # Cross-platform
                 re.compile(r'shutdown', re.IGNORECASE),
                 re.compile(r'restart', re.IGNORECASE),
+                # Windows
+                re.compile(r'format\s+[a-z]:', re.IGNORECASE),
+                re.compile(r'del\s+/s\s+/q\s+[a-z]:', re.IGNORECASE),
+                # Unix/macOS
+                re.compile(r'rm\s+-rf\s+/', re.IGNORECASE),
+                re.compile(r'mkfs\b', re.IGNORECASE),
+                re.compile(r'dd\s+if=', re.IGNORECASE),
+                re.compile(r':\(\)\{.*\|.*&\}\;:', re.IGNORECASE),
             ]
             self.blocked_imports = {'os.system', 'subprocess', 'shutil.rmtree'}
             self.python_timeout = 30

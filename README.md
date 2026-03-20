@@ -12,12 +12,15 @@ A comprehensive remote PC control system using FastMCP servers with Telegram as 
 - **System Monitoring** - CPU, memory, disk, and process info
 - **Security** - User whitelist, permission levels, sandboxing
 - **Extensible** - Plugin system for adding new MCP modules
+- **LangGraph Integration** - Utilizes LangGraph for advanced agentic workflows and state management.
 
 ## 📋 Requirements
 
-- Python 3.10+
-- Windows (primary support), Linux/Mac (compatible)
+- Python 3.10+ (auto-installed by uv)
+- [uv](https://docs.astral.sh/uv/) package manager
+- Node.js (for OpenCode CLI)
 - Telegram account
+- Windows / Linux / macOS
 
 ## 🛠️ Quick Setup
 
@@ -35,55 +38,68 @@ A comprehensive remote PC control system using FastMCP servers with Telegram as 
 2. Click **Start**.
 3. It will reply with your details. Copy the `Id` number (e.g., `123456789`). This is for the whitelist.
 
-### 3. Get a GitHub Personal Access Token
-To use the GitHub features of the agent:
-1. Go to **[GitHub Developer Settings > Personal Access Tokens > Tokens (classic)](https://github.com/settings/tokens)**.
-2. Click **Generate new token** > **Generate new token (classic)**.
-3. **Note**: Give it a name like "Remote Agent".
-4. **Select Scopes**:
-   - `repo` (Full control of private repositories)
-   - `workflow` (Update GitHub Action workflows)
-   - `read:user` (Read user profile data)
-5. Click **Generate token**.
-6. **Copy the token** immediately. You verify won't see it again. this will be your `GITHUB_TOKEN`.
+### 3. Install OpenCode CLI
 
-### 4. Configure the System
-
-Create a `.env` file in the project root:
+OpenCode is the AI backend that powers natural language processing in the bot.
 
 ```bash
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-GITHUB_TOKEN=your_github_token_here  # Optional, for GitHub features
-AGENT_PASSWORD=strong_password_here  # Optional, defaults to "changeme"
+npm install -g opencode-ai
 ```
 
-Or update `config/config.yaml` directly.
+Verify the installation:
+```bash
+opencode --version
+```
+
+### 4. Get a Gemini API Key
+
+OpenCode uses Google Gemini as the default AI provider.
+
+1. Go to **[Google AI Studio](https://aistudio.google.com/apikey)**.
+2. Click **Create API Key**.
+3. Copy the key — you'll need it for `GEMINI_API_KEY` and `GOOGLE_GENERATIVE_AI_API_KEY` in your `.env`.
+
+### 5. Configure Environment Variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in your values:
+
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token_here           # From step 1
+TELEGRAM_USER_ID=your_user_id_here               # From step 2
+WORKING_DIR=/Users/yourname                      # Default directory for agent commands
+SANDBOX_ALLOWED_PATHS=/Users/yourname,/tmp       # Comma-separated dirs the agent can access
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key     # From step 4
+AGENT_PASSWORD=                                  # Optional, for non-whitelisted users
+GIT_TOKEN=your_git_token_here                    # Optional, for GitHub features
+```
 
 ### 5. Install Dependencies
 
-```yaml
-telegram:
-  token: "your_bot_token_here"
-
-security:
-  whitelist:
-    - 123456789  # Your Telegram user ID
-  
-permissions:
-  admin:
-    - 123456789  # Your Telegram user ID
-```
-
-### 4. Install Dependencies
-
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it:
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+Then sync the project:
+```bash
+uv sync
+```
+
+This creates a `.venv/`, installs the correct Python version, and installs all dependencies.
 
 ### 6. Run the Agent
 
 ```bash
-python -m src.main
+uv run python src/main.py
+```
+
+For development with auto-restart on code changes:
+```bash
+uv run --group dev watchmedo auto-restart --directory=./src --directory=./config --pattern="*.py;*.yaml" --recursive -- python src/main.py
 ```
 
 ## 📱 Usage
@@ -133,87 +149,4 @@ $ ipconfig
 |-------|-------------|
 | `readonly` | View files, system info only |
 | `user` | Execute commands, read/write files |
-| `admin` | Full access including delete, config |
-
-### Sandboxing
-
-- File operations restricted to allowed paths
-- Dangerous commands blocked
-- Python imports restricted
-
-### Configuration
-
-Edit `config/permissions.yaml` for fine-grained control.
-
-## 🔌 Extending with Plugins
-
-Create new MCP modules in the `plugins/` directory:
-
-```python
-from src.tools.base import BaseTool
-
-class MyCustomTool(BaseTool):
-    name = "custom"
-    description = "My custom tool"
-    actions = ["action1", "action2"]
-    
-    async def execute(self, action: str, args: dict) -> str:
-        # Implement your tool logic
-        return "Result"
-```
-
-Register in `mcp_server.py`:
-```python
-from plugins.my_custom_tool import MyCustomTool
-self.registry.register_class(MyCustomTool)
-```
-
-## 📁 Project Structure
-
-```
-AGENT/
-├── config/
-│   ├── config.yaml         # Main configuration
-│   └── permissions.yaml    # Permission definitions
-├── src/
-│   ├── main.py             # Entry point
-│   ├── core/
-│   │   ├── mcp_server.py   # FastMCP server
-│   │   ├── router.py       # Command routing
-│   │   └── auth.py         # Authentication
-│   ├── bridges/
-│   │   └── telegram_bridge.py
-│   ├── tools/
-│   │   ├── shell.py
-│   │   ├── files.py
-│   │   ├── apps.py
-│   │   ├── python_exec.py
-│   │   └── system.py
-│   └── utils/
-│       ├── logger.py
-│       └── sandbox.py
-├── plugins/                 # Extension modules
-├── logs/                    # Log files
-└── requirements.txt
-```
-
-## 🗺️ Roadmap
-
-- [ ] Agent integration with LLM models
-- [ ] GitHub MCP module
-- [ ] Email MCP module
-- [ ] Teams MCP module
-- [ ] Web UI interface
-- [ ] Voice commands
-
-## ⚠️ Security Warning
-
-This system allows remote command execution on your PC. Always:
-- Keep your bot token secret
-- Only whitelist trusted user IDs
-- Review commands before expanding permissions
-- Monitor audit logs regularly
-
-## 📄 License
-
-MIT License
+| `admin` | Full access includi

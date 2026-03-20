@@ -9,6 +9,7 @@ import os
 from typing import Any, Dict, Optional
 
 from .base import BaseTool
+from ..utils.platform import IS_WINDOWS, IS_MAC
 
 
 class AppsTool(BaseTool):
@@ -16,14 +17,13 @@ class AppsTool(BaseTool):
     Launch applications on the local system.
     Supports common application shortcuts.
     """
-    
+
     name = "apps"
     description = "Launch applications"
     actions = ["launch", "open", "list"]
     capabilities_required = ["app_launch"]
-    
-    # Default application shortcuts for Windows
-    DEFAULT_SHORTCUTS = {
+
+    WINDOWS_SHORTCUTS = {
         'notepad': 'notepad.exe',
         'calc': 'calc.exe',
         'calculator': 'calc.exe',
@@ -46,11 +46,58 @@ class AppsTool(BaseTool):
         'task': 'taskmgr.exe',
         'taskmanager': 'taskmgr.exe',
     }
+
+    MAC_SHORTCUTS = {
+        'textedit': 'open -a "TextEdit"',
+        'notepad': 'open -a "TextEdit"',
+        'calc': 'open -a "Calculator"',
+        'calculator': 'open -a "Calculator"',
+        'finder': 'open .',
+        'explorer': 'open .',
+        'files': 'open .',
+        'terminal': 'open -a "Terminal"',
+        'chrome': 'open -a "Google Chrome"',
+        'browser': 'open -a "Safari"',
+        'safari': 'open -a "Safari"',
+        'firefox': 'open -a "Firefox"',
+        'vscode': 'code',
+        'code': 'code',
+        'settings': 'open "x-apple.systempreferences:"',
+        'activity': 'open -a "Activity Monitor"',
+        'taskmanager': 'open -a "Activity Monitor"',
+        'preview': 'open -a "Preview"',
+    }
+
+    LINUX_SHORTCUTS = {
+        'notepad': 'gedit',
+        'textedit': 'gedit',
+        'calc': 'gnome-calculator',
+        'calculator': 'gnome-calculator',
+        'explorer': 'nautilus .',
+        'files': 'nautilus .',
+        'terminal': 'gnome-terminal',
+        'chrome': 'google-chrome',
+        'browser': 'xdg-open http://',
+        'firefox': 'firefox',
+        'vscode': 'code',
+        'code': 'code',
+        'settings': 'gnome-control-center',
+        'taskmanager': 'gnome-system-monitor',
+    }
+
+    @staticmethod
+    def _get_default_shortcuts() -> dict:
+        if IS_WINDOWS:
+            return AppsTool.WINDOWS_SHORTCUTS
+        elif IS_MAC:
+            return AppsTool.MAC_SHORTCUTS
+        else:
+            return AppsTool.LINUX_SHORTCUTS
     
     def __init__(self, sandbox=None, config: Optional[dict] = None):
         super().__init__(sandbox, config)
-        # Merge default shortcuts with config shortcuts
-        self.shortcuts = self.DEFAULT_SHORTCUTS.copy()
+        # Merge platform-specific defaults with config shortcuts
+        self.shortcuts = self._get_default_shortcuts().copy()
         custom_shortcuts = self.config.get('shortcuts', {})
         self.shortcuts.update(custom_shortcuts)
     

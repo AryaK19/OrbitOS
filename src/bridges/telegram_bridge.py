@@ -260,9 +260,12 @@ class TelegramBridge:
             'message_count': 0,
             'last_activity': datetime.now(),
             'authenticated': existing_auth,
-            'login_time': login_time
+            'login_time': login_time,
+            'mode': self.STATE_NORMAL,
+            'project_dir': None,
+            'project_goal': None
         }
-        
+
         welcome_text = f"""<b>Welcome, {user.first_name}!</b>
 
 I'm your <b>Remote PC Agent</b> powered by AI.
@@ -308,9 +311,12 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             'message_count': 0,
             'last_activity': datetime.now(),
             'authenticated': existing_auth,
-            'login_time': login_time
+            'login_time': login_time,
+            'mode': self.STATE_NORMAL,
+            'project_dir': None,
+            'project_goal': None
         }
-        
+
         await update.message.reply_text(
             "🆕 **New Session Started!**\n\n"
             "Previous conversation cleared.\n"
@@ -621,7 +627,7 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         if not filepath:
             await update.message.reply_text(
                 "📁 **Usage:** `/send <filepath>`\n\n"
-                "Example: `/send C:\\Users\\arya2\\Documents\\report.pdf`",
+                "Example: `/send ~/Documents/report.pdf`",
                 parse_mode='Markdown'
             )
             return
@@ -741,39 +747,49 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             )
     
     async def _process_with_agent(
-        self, 
-        update: Update, 
-        text: str, 
-        working_dir: str = None, 
+        self,
+        update: Update,
+        text: str,
+        working_dir: str = None,
         system_context: str = None
     ):
         """Process message through OpenCode agent."""
         user = update.effective_user
-        
+        import time
+        start_time = time.monotonic()
+
+        self.logger.info(f"[bridge][user={user.id}] Received message: {text[:80]}...")
+
         await update.message.chat.send_action('typing')
         status_msg = await update.message.reply_text("🤔 Thinking...")
-        
+
         try:
             is_file_request = self._is_file_send_request(text)
-            
+
             if is_file_request:
                 enhanced_text = self._enhance_file_request(text)
             else:
                 enhanced_text = text
-            
-            result = await self.agent.process(
-                enhanced_text,
-                user.id,
-                username=user.username or str(user.id),
-                working_dir=working_dir,
-                system_context=system_context
+
+            result = await asyncio.wait_for(
+                self.agent.process(
+                    enhanced_text,
+                    user.id,
+                    username=user.username or str(user.id),
+                    working_dir=working_dir,
+                    system_context=system_context
+                ),
+                timeout=150  # agent timeout + buffer
             )
-            
+
+            elapsed = time.monotonic() - start_time
+            self.logger.info(f"[bridge][user={user.id}] Agent responded in {elapsed:.1f}s | result_len={len(result)}")
+
             await status_msg.delete()
-            
+
             if is_file_request:
                 files_to_send = self._extract_file_paths(result, text)
-                
+
                 if files_to_send:
                     await self._send_response(update, f"📁 Found {len(files_to_send)} file(s)")
                     for filepath in files_to_send[:10]:
@@ -782,9 +798,21 @@ I'm your <b>Remote PC Agent</b> powered by AI.
                     await self._send_response(update, result)
             else:
                 await self._send_response(update, result)
-            
+
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - start_time
+            self.logger.error(
+                f"[bridge][user={user.id}] BRIDGE TIMEOUT after {elapsed:.1f}s | "
+                f"Agent did not return within 150s — this means the agent's own timeout ({self.agent.timeout}s) "
+                f"also failed to fire. Possible deadlock or event loop block."
+            )
+            await status_msg.edit_text("⏱️ Request timed out. Try again or simplify your request.")
         except Exception as e:
-            self.logger.error(f"Agent error: {e}", exc_info=True)
+            elapsed = time.monotonic() - start_time
+            self.logger.error(
+                f"[bridge][user={user.id}] Agent error after {elapsed:.1f}s: {e}",
+                exc_info=True
+            )
             await status_msg.edit_text(f"⚠️ Error: {str(e)}")
     
     def _is_file_send_request(self, text: str) -> bool:
@@ -801,22 +829,24 @@ I'm your <b>Remote PC Agent</b> powered by AI.
     
     def _enhance_file_request(self, text: str) -> str:
         """Enhance file request prompt."""
-        return f"""The user wants files sent to them via Telegram. 
+        return f"""The user wants files sent to them via Telegram.
 {text}
 
 IMPORTANT: List the FULL ABSOLUTE PATHS of matching files, one per line.
-Start each path with the drive letter (e.g., C:\\Users\\...).
 If no files found, explain why."""
-    
+
     def _extract_file_paths(self, response: str, original_request: str) -> List[str]:
         """Extract file paths from response."""
         files = []
-        
+
         patterns = [
+            # Windows paths: C:\Users\..., D:/path/...
             r'[A-Za-z]:\\[^\r\n\t"<>|*?]+\.[a-zA-Z0-9]+',
             r'[A-Za-z]:/[^\r\n\t"<>|*?]+\.[a-zA-Z0-9]+',
+            # Unix/macOS paths: /home/..., /Users/...
+            r'/(?:home|Users|tmp|var|opt|etc|mnt|media|Volumes)[^\r\n\t"<>|*?]*\.[a-zA-Z0-9]+',
         ]
-        
+
         for pattern in patterns:
             matches = re.findall(pattern, response)
             for match in matches:
@@ -824,7 +854,7 @@ If no files found, explain why."""
                 if os.path.exists(filepath) and os.path.isfile(filepath):
                     if filepath not in files:
                         files.append(filepath)
-        
+
         return files
     
     async def _send_file_to_user(self, update: Update, filepath: str):
