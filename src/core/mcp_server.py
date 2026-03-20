@@ -212,11 +212,63 @@ class MCPServer:
         """Get the FastMCP instance."""
         return self.mcp
     
-    async def run_mcp(self):
+    def run_mcp(self):
         """Run the MCP server."""
         mcp_config = self.config.get('mcp', {})
         host = mcp_config.get('host', 'localhost')
         port = mcp_config.get('port', 8765)
         
         self.logger.info(f"Starting MCP server on {host}:{port}")
-        await self.mcp.run()
+        self.mcp.run(transport='http', host=host, port=port)
+
+
+if __name__ == "__main__":
+    import sys
+    import yaml
+    import os
+    from dotenv import load_dotenv
+    
+    # Load environment variables
+    load_dotenv()
+    
+    def expand_env_vars(config):
+        """Recursively expand environment variables in config."""
+        if isinstance(config, dict):
+            return {k: expand_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [expand_env_vars(v) for v in config]
+        elif isinstance(config, str):
+            if config.startswith('${') and config.endswith('}'):
+                env_var = config[2:-1]
+                val = os.getenv(env_var)
+                return val if val is not None else config
+            return config
+        else:
+            return config
+
+    # Calculate paths (assuming we are in src/core)
+    # File is at src/core/mcp_server.py
+    # Config is at config/config.yaml (relative to root)
+    root_dir = Path(__file__).parent.parent.parent
+    config_path = root_dir / "config" / "config.yaml"
+    
+    if not config_path.exists():
+        print(f"❌ Config file not found at: {config_path}")
+        sys.exit(1)
+        
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_raw = yaml.safe_load(f)
+            config = expand_env_vars(config_raw)
+            
+        print(f"✅ Loaded configuration from {config_path}")
+        
+        mcp = MCPServer(config)
+        mcp.run_mcp()
+        
+    except KeyboardInterrupt:
+        print("\nStopped by user")
+    except Exception as e:
+        print(f"❌ Error starting MCP server: {e}")
+        import traceback
+        traceback.print_exc()
