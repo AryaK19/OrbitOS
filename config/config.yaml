@@ -1,11 +1,14 @@
 # Remote MCP Control System Configuration
 
-# Agent Settings (OpenCode Integration)
+# Agent Settings (LangGraph)
 agent:
   enabled: true
   timeout: 120  # seconds
-  working_dir: "C:/Users/arya2"  # Default working directory
-  model: "github-copilot/gpt-4o"  # Uncomment to specify model
+  working_dir: "${WORKING_DIR}"  # Set via environment variable
+  model: "google/gemini-2.5-flash"
+  max_tool_iterations: 10  # Max ReAct tool-calling loops
+  temperature: 0.1
+  max_context_messages: 20  # Per-user conversation history cap
 
 # Telegram Bot Settings
 telegram:
@@ -15,7 +18,7 @@ telegram:
 security:
   # Whitelist of allowed Telegram user IDs
   whitelist:
-    - 1112461745  # Replace with your Telegram user ID
+    - ${TELEGRAM_USER_ID}  # Set via environment variable
   
   # Default permission level for whitelisted users
   default_permission: "user"
@@ -29,7 +32,7 @@ security:
 # Permission Levels (mapped to user IDs)
 permissions:
   admin:
-    - 1112461745  # Replace with admin user IDs
+    - ${TELEGRAM_USER_ID}  # Set via environment variable
   user: []
   readonly: []
 
@@ -44,8 +47,7 @@ logging:
 sandbox:
   # Allowed directories for file operations
   allowed_paths:
-    - "C:/Users/arya2"
-    - "D:/"
+    - "${SANDBOX_ALLOWED_PATHS}"  # Comma-separated paths, e.g. /Users/me,/tmp
   
   # Blocked commands (regex patterns)
   blocked_commands:
@@ -90,8 +92,6 @@ tools:
   
   apps:
     shortcuts:
-      notepad: "notepad.exe"
-      browser: "start chrome"
+      # Add custom app shortcuts here (overrides platform defaults)
+      # Example: myapp: "/path/to/myapp"
       vscode: "code"
-      explorer: "explorer.exe"
-      terminal: "wt.exe"
