@@ -255,31 +255,31 @@ class CommandRouter:
     def _handle_help(self, topic: str) -> CommandResult:
         """Generate help text."""
         help_text = """
-🤖 **Remote Agent Commands**
+        🤖 **Remote Agent Commands**
 
-**Shell Commands:**
-• `/shell <command>` - Run a shell command
-• `$ <command>` - Shorthand for shell
+        **Shell Commands:**
+        • `/shell <command>` - Run a shell command
+        • `$ <command>` - Shorthand for shell
 
-**File Operations:**
-• `/files list <path>` - List directory contents
-• `/files read <path>` - Read file contents
-• `/files write <path> <content>` - Write to file
+        **File Operations:**
+        • `/files list <path>` - List directory contents
+        • `/files read <path>` - Read file contents
+        • `/files write <path> <content>` - Write to file
 
-**Python Execution:**
-• `/python <code>` - Execute Python code
-• `>>> <code>` - Shorthand for Python
+        **Python Execution:**
+        • `/python <code>` - Execute Python code
+        • `>>> <code>` - Shorthand for Python
 
-**Applications:**
-• `/apps <app_name>` - Launch an application
+        **Applications:**
+        • `/apps <app_name>` - Launch an application
 
-**System:**
-• `/system info` - System information
-• `/system processes` - List processes
+        **System:**
+        • `/system info` - System information
+        • `/system processes` - List processes
 
-**Help:**
-• `/help` - Show this help
-"""
+        **Help:**
+        • `/help` - Show this help
+        """
         return CommandResult(
             success=True,
             output=help_text,

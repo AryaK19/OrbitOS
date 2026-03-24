@@ -45,11 +45,18 @@ class MCPServer:
     def _init_sandbox(self):
         """Initialize the sandbox."""
         sandbox_config = self.config.get('sandbox', {})
+
+        # Compute the absolute path of the project's .env file so it is always
+        # blocked regardless of the current working directory.
+        project_root = Path(__file__).resolve().parent.parent.parent
+        env_file_path = str(project_root / ".env")
+
         self.sandbox = Sandbox(SandboxConfig(
             allowed_paths=sandbox_config.get('allowed_paths', [str(Path.home())]),
             blocked_commands=sandbox_config.get('blocked_commands', []),
             blocked_imports=sandbox_config.get('python', {}).get('blocked_imports', []),
-            python_timeout=sandbox_config.get('python', {}).get('timeout_seconds', 30)
+            python_timeout=sandbox_config.get('python', {}).get('timeout_seconds', 30),
+            blocked_paths=[env_file_path],
         ))
     
     def _init_auth(self):

@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 from typing import List, Optional, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .logger import get_logger
 
@@ -19,6 +19,7 @@ class SandboxConfig:
     blocked_commands: List[str]
     blocked_imports: List[str]
     python_timeout: int = 30
+    blocked_paths: List[str] = field(default_factory=list)
 
 
 class Sandbox:
@@ -36,6 +37,7 @@ class Sandbox:
             self.blocked_patterns = [re.compile(p, re.IGNORECASE) for p in config.blocked_commands]
             self.blocked_imports = set(config.blocked_imports)
             self.python_timeout = config.python_timeout
+            self.blocked_paths = [Path(p).resolve() for p in config.blocked_paths]
         else:
             # Default safe configuration
             self.allowed_paths = [Path.home().resolve()]
@@ -54,6 +56,7 @@ class Sandbox:
             ]
             self.blocked_imports = {'os.system', 'subprocess', 'shutil.rmtree'}
             self.python_timeout = 30
+            self.blocked_paths = []
     
     def validate_path(self, path: str, require_exists: bool = False) -> tuple[bool, str]:
         """
@@ -68,10 +71,16 @@ class Sandbox:
         """
         try:
             resolved = Path(path).resolve()
-            
+
             if require_exists and not resolved.exists():
                 return False, f"Path does not exist: {path}"
-            
+
+            # Hard-block explicitly restricted files (e.g. .env)
+            for blocked in self.blocked_paths:
+                if resolved == blocked:
+                    self.logger.warning(f"Blocked access to restricted file: {resolved}")
+                    return False, "Access to this file is restricted by security policy"
+
             # Check if path is within any allowed path
             for allowed in self.allowed_paths:
                 try:
@@ -79,9 +88,9 @@ class Sandbox:
                     return True, ""
                 except ValueError:
                     continue
-            
+
             return False, f"Path outside sandbox: {path}"
-            
+
         except Exception as e:
             return False, f"Invalid path: {str(e)}"
     
@@ -95,11 +104,28 @@ class Sandbox:
         Returns:
             Tuple of (is_valid, error_message)
         """
+        # Block shell commands that would read restricted files (e.g. .env)
+        _ENV_SHELL_PATTERN = re.compile(
+            r'(?:^|[&|;\s])'
+            r'(?:cat|type|more|less|tail|head|bat|Get-Content|gc|curl|wget|nano|vim|vi|notepad|code)'
+            r'[^\n]*\.env\b',
+            re.IGNORECASE,
+        )
+        if _ENV_SHELL_PATTERN.search(command):
+            self.logger.warning(f"Blocked command attempting to read .env file: {command}")
+            return False, "Command blocked by security policy"
+
+        # Also block any command that simply references the .env filename directly
+        _ENV_GENERIC_PATTERN = re.compile(r'(?:^|\s)["\']?\.env["\']?(?:\s|$)', re.IGNORECASE)
+        if _ENV_GENERIC_PATTERN.search(command):
+            self.logger.warning(f"Blocked command referencing .env file: {command}")
+            return False, "Command blocked by security policy"
+
         for pattern in self.blocked_patterns:
             if pattern.search(command):
                 self.logger.warning(f"Blocked dangerous command: {command}")
-                return False, f"Command blocked by security policy"
-        
+                return False, "Command blocked by security policy"
+
         return True, ""
     
     def validate_python_code(self, code: str) -> tuple[bool, str]:
@@ -116,7 +142,22 @@ class Sandbox:
         for blocked in self.blocked_imports:
             if blocked in code:
                 return False, f"Blocked import/function: {blocked}"
-        
+
+        # Block Python code that tries to open the .env file
+        _ENV_OPEN_PATTERN = re.compile(
+            r'open\s*\([^)]*["\'](?:[^"\']*/)*\.env["\'\s,)]',
+            re.IGNORECASE,
+        )
+        if _ENV_OPEN_PATTERN.search(code):
+            self.logger.warning("Blocked Python code attempting to read .env file")
+            return False, "Reading .env files is blocked by security policy"
+
+        # Also catch Path('.env').read_text() and similar
+        _ENV_PATH_PATTERN = re.compile(r'["\'](?:[^"\']*/)*\.env["\']', re.IGNORECASE)
+        if _ENV_PATH_PATTERN.search(code):
+            self.logger.warning("Blocked Python code referencing .env file path")
+            return False, "Reading .env files is blocked by security policy"
+
         # Check for exec/eval with user input
         dangerous_patterns = [
             r'exec\s*\(',
@@ -125,13 +166,13 @@ class Sandbox:
             r'compile\s*\(',
             r'open\s*\([^)]*,\s*["\']w',  # Writing files
         ]
-        
+
         for pattern in dangerous_patterns:
             if re.search(pattern, code):
                 self.logger.warning(f"Potentially dangerous Python code detected")
                 # We allow these but log them - admin decision
                 break
-        
+
         return True, ""
     
     def sanitize_output(self, output: str, max_length: int = 4000) -> str:
