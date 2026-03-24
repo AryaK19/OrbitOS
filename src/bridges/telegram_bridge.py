@@ -846,6 +846,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
                     pass
 
         try:
+            # Use code_mode timeout from config + buffer
+            code_timeout = self.mcp.config.get('code_mode', {}).get('timeout', 600) + 20
             result = await asyncio.wait_for(
                 self.agent.process_code_session(
                     message=text,
@@ -855,7 +857,7 @@ I'm your <b>Remote PC Agent</b> powered by AI.
                     project_goal=session.get('project_goal'),
                     progress_callback=progress_callback,
                 ),
-                timeout=200,  # outer timeout with buffer
+                timeout=code_timeout,
             )
 
             elapsed = time.monotonic() - start_time

@@ -42,17 +42,21 @@ class Sandbox:
             # Default safe configuration
             self.allowed_paths = [Path.home().resolve()]
             self.blocked_patterns = [
-                # Cross-platform
-                re.compile(r'shutdown', re.IGNORECASE),
-                re.compile(r'restart', re.IGNORECASE),
+                # Cross-platform: block only standalone shutdown/restart commands,
+                # NOT as arguments to systemctl/service etc.
+                re.compile(r'^\s*(?:sudo\s+)?shutdown\b', re.IGNORECASE),
+                re.compile(r'^\s*(?:sudo\s+)?restart\b', re.IGNORECASE),
+                re.compile(r'^\s*(?:sudo\s+)?reboot\b', re.IGNORECASE),
+                re.compile(r'^\s*(?:sudo\s+)?halt\b', re.IGNORECASE),
+                re.compile(r'^\s*(?:sudo\s+)?init\s+0\b', re.IGNORECASE),
                 # Windows
                 re.compile(r'format\s+[a-z]:', re.IGNORECASE),
                 re.compile(r'del\s+/s\s+/q\s+[a-z]:', re.IGNORECASE),
                 # Unix/macOS
-                re.compile(r'rm\s+-rf\s+/', re.IGNORECASE),
+                re.compile(r'rm\s+(-\w*\s+)*-rf\s+/', re.IGNORECASE),
                 re.compile(r'mkfs\b', re.IGNORECASE),
                 re.compile(r'dd\s+if=', re.IGNORECASE),
-                re.compile(r':\(\)\{.*\|.*&\}\;:', re.IGNORECASE),
+                re.compile(r':\(\)\{.*\|.*\&\}\;:', re.IGNORECASE),
             ]
             self.blocked_imports = {'os.system', 'subprocess', 'shutil.rmtree'}
             self.python_timeout = 30

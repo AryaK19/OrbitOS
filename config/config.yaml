@@ -49,13 +49,15 @@ sandbox:
   allowed_paths:
     - "${SANDBOX_ALLOWED_PATHS}"  # Comma-separated paths, e.g. /Users/me,/tmp
   
-  # Blocked commands (regex patterns)
+  # Blocked commands (regex patterns) — anchored to block standalone invocations only
   blocked_commands:
-    - "rm -rf /"
-    - "format"
-    - "del /s /q C:"
-    - "shutdown"
-    - "restart"
+    - "^\\s*(?:sudo\\s+)?rm\\s+(-\\w*\\s+)*-rf\\s+/"
+    - "^\\s*(?:sudo\\s+)?shutdown\\b"
+    - "^\\s*(?:sudo\\s+)?reboot\\b"
+    - "^\\s*(?:sudo\\s+)?halt\\b"
+    - "^\\s*(?:sudo\\s+)?init\\s+0"
+    - "format\\s+[cC]:"
+    - "del\\s+/s\\s+/q\\s+C:"
   
   # Python execution settings
   python:
@@ -104,5 +106,5 @@ tools:
 # Code Mode Settings (activated via /code command)
 code_mode:
   default_model: "google/gemini-2.5-pro"
-  max_iterations: 40
-  timeout: 180
+  max_iterations: 80
+  timeout: 600
