@@ -41,7 +41,17 @@ class UserContext:
 
     def _trim(self):
         if len(self.messages) > self.max_messages:
-            self.messages = self.messages[-self.max_messages:]
+            trimmed = self.messages[-self.max_messages:]
+            # Re-anchor to the first HumanMessage so we never start with a
+            # dangling AIMessage(tool_calls), which Gemini rejects as
+            # INVALID_ARGUMENT ("function call turn must follow user/tool turn").
+            for i, msg in enumerate(trimmed):
+                if isinstance(msg, HumanMessage):
+                    self.messages = trimmed[i:]
+                    return
+            # No HumanMessage found in the trimmed window — discard all to
+            # avoid sending a corrupted history.
+            self.messages = []
 
     def get_messages(self) -> list[BaseMessage]:
         return list(self.messages)
@@ -224,6 +234,24 @@ class OrbitAgent:
             elapsed = time.monotonic() - start_time
             error_str = str(e)
             category = self._classify_error(error_str)
+
+            # Gemini rejects histories where a tool-call turn doesn't
+            # immediately follow a user or tool-response turn.  Clear the
+            # corrupted context so the next message works cleanly.
+            if "function call turn" in error_str.lower() or (
+                "invalid_argument" in error_str.lower()
+                and "function" in error_str.lower()
+            ):
+                context.clear()
+                self.logger.warning(
+                    f"[user={user_id}] Cleared corrupted context after "
+                    f"INVALID_ARGUMENT | model={model_id}"
+                )
+                return (
+                    "⚠️ Conversation context was reset due to a message-ordering "
+                    "error with the AI model. Please resend your message."
+                )
+
             self.logger.error(
                 f"[user={user_id}] {category} after {elapsed:.1f}s | "
                 f"model={model_id} | error={error_str}",
