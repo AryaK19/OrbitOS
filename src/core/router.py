@@ -4,6 +4,7 @@ Routes commands to appropriate tools and handles parsing.
 """
 
 import re
+import shlex
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -153,12 +154,92 @@ class CommandRouter:
         
         elif tool == 'files':
             # Parse: /files <action> <path> [content]
-            # Actions: list, read, write, delete
+            # Extended options:
+            # /files list <path> --page 2 --limit 20 --filter "*.py"
+            # /files search <path> --filter "*.pdf" --max-results 50 --timeout 3
             parts = args_str.split(maxsplit=2)
             action = parts[0] if parts else 'list'
+
+            if action in {'list', 'search'}:
+                try:
+                    tokens = shlex.split(args_str)
+                except ValueError:
+                    tokens = args_str.split()
+
+                action = tokens[0] if tokens else 'list'
+                path = '.'
+                parsed_args: Dict[str, Any] = {'path': path}
+                index = 1
+
+                while index < len(tokens):
+                    token = tokens[index]
+
+                    if not token.startswith('--') and parsed_args.get('path', '.') == '.':
+                        parsed_args['path'] = token
+                        index += 1
+                        continue
+
+                    if token in {'--page'} and index + 1 < len(tokens):
+                        parsed_args['page'] = tokens[index + 1]
+                        index += 2
+                        continue
+                    if token.startswith('--page='):
+                        parsed_args['page'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+
+                    if token in {'--limit'} and index + 1 < len(tokens):
+                        parsed_args['limit'] = tokens[index + 1]
+                        index += 2
+                        continue
+                    if token.startswith('--limit='):
+                        parsed_args['limit'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+
+                    if token in {'--filter', '--pattern'} and index + 1 < len(tokens):
+                        parsed_args['filter'] = tokens[index + 1]
+                        index += 2
+                        continue
+                    if token.startswith('--filter='):
+                        parsed_args['filter'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+                    if token.startswith('--pattern='):
+                        parsed_args['filter'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+
+                    if token in {'--max-results'} and index + 1 < len(tokens):
+                        parsed_args['max_results'] = tokens[index + 1]
+                        index += 2
+                        continue
+                    if token.startswith('--max-results='):
+                        parsed_args['max_results'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+
+                    if token in {'--timeout'} and index + 1 < len(tokens):
+                        parsed_args['timeout_seconds'] = tokens[index + 1]
+                        index += 2
+                        continue
+                    if token.startswith('--timeout='):
+                        parsed_args['timeout_seconds'] = token.split('=', 1)[1]
+                        index += 1
+                        continue
+
+                    index += 1
+
+                return ParsedCommand(
+                    tool='files',
+                    action=action,
+                    args=parsed_args,
+                    raw=raw
+                )
+
             path = parts[1] if len(parts) > 1 else '.'
             content = parts[2] if len(parts) > 2 else None
-            
+
             return ParsedCommand(
                 tool='files',
                 action=action,
@@ -262,9 +343,12 @@ class CommandRouter:
 • `$ <command>` - Shorthand for shell
 
 **File Operations:**
-• `/files list <path>` - List directory contents
+• `/files list <path> --page 1 --limit 20 --filter "*.py"` - List directory contents (paginated)
+• `/files search <path> --filter "*.pdf" --max-results 50 --timeout 3` - Recursive file search
 • `/files read <path>` - Read file contents
 • `/files write <path> <content>` - Write to file
+• `/files rename <path> <new_path>` - Rename file or directory
+• `/files move <path> <destination>` - Move file or directory
 
 **Python Execution:**
 • `/python <code>` - Execute Python code

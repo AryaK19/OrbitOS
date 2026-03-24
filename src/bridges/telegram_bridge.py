@@ -7,6 +7,7 @@ Includes session management for conversation context.
 import asyncio
 import os
 import re
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -62,6 +63,7 @@ class TelegramBridge:
         
         # Build application
         self.app = Application.builder().token(token).build()
+        self.pending_delete_confirmations: dict = {}
         self._register_handlers()
         
         self.logger.info(f"Telegram Bridge initialized (Agent mode: {self.agent_mode})")
@@ -79,6 +81,12 @@ class TelegramBridge:
         self.app.add_handler(CommandHandler("models", self._handle_models))
         self.app.add_handler(CommandHandler("model", self._handle_set_model))
         self.app.add_handler(CallbackQueryHandler(self._handle_model_callback, pattern="^model:"))
+        self.app.add_handler(
+            CallbackQueryHandler(
+                self._handle_delete_confirmation_callback,
+                pattern="^(deleteconfirm|deletecancel):"
+            )
+        )
         
         # Utility commands
         self.app.add_handler(CommandHandler("help", self._handle_help))
@@ -116,7 +124,8 @@ class TelegramBridge:
                 # /code mode state
                 'mode': self.STATE_NORMAL,
                 'project_dir': None,
-                'project_goal': None
+                'project_goal': None,
+                'pending_delete_token': None
             }
         return self.sessions[user_id]
     
@@ -159,6 +168,7 @@ class TelegramBridge:
         
         session['authenticated'] = False
         session['login_time'] = None
+        self._clear_pending_delete_confirmation(session)
         
         await update.message.reply_text("👋 Logged out.")
 
@@ -263,7 +273,8 @@ class TelegramBridge:
             'login_time': login_time,
             'mode': self.STATE_NORMAL,
             'project_dir': None,
-            'project_goal': None
+            'project_goal': None,
+            'pending_delete_token': None
         }
 
         welcome_text = f"""<b>Welcome, {user.first_name}!</b>
@@ -314,7 +325,8 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             'login_time': login_time,
             'mode': self.STATE_NORMAL,
             'project_dir': None,
-            'project_goal': None
+            'project_goal': None,
+            'pending_delete_token': None
         }
 
         await update.message.reply_text(
@@ -330,6 +342,9 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         
         if self.agent:
             self.agent.clear_context(user.id)
+
+        session = self._get_session(user.id)
+        self._clear_pending_delete_confirmation(session)
         
         await update.message.reply_text(
             "🧹 **Conversation Cleared!**\n\n"
@@ -514,6 +529,61 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             )
         else:
             await query.edit_message_text(f"<b>Error:</b> Invalid model.", parse_mode='HTML')
+
+    async def _handle_delete_confirmation_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle delete confirmation button callbacks."""
+        query = update.callback_query
+        user = query.from_user
+
+        if not self.mcp.auth.is_whitelisted(user.id):
+            session = self._get_session(user.id)
+            if not self._is_session_valid(session):
+                await query.answer("Auth required", show_alert=True)
+                return
+
+        await query.answer()
+        data = query.data or ""
+        prefix, _, token = data.partition(":")
+
+        pending = self.pending_delete_confirmations.get(token)
+        if not pending:
+            await query.edit_message_text("❌ Confirmation expired or already handled.")
+            return
+
+        if pending.get('user_id') != user.id:
+            await query.answer("This confirmation is not for your session.", show_alert=True)
+            return
+
+        if datetime.now().timestamp() > pending.get('expires_at', 0):
+            self.pending_delete_confirmations.pop(token, None)
+            session = self._get_session(user.id)
+            if session.get('pending_delete_token') == token:
+                session['pending_delete_token'] = None
+            await query.edit_message_text("⏱️ Confirmation expired. Please request again.")
+            return
+
+        session = self._get_session(user.id)
+        if prefix == "deletecancel":
+            self._clear_pending_delete_confirmation(session)
+            await query.edit_message_text("✅ Delete request cancelled.")
+            return
+
+        self._clear_pending_delete_confirmation(session)
+        await query.edit_message_text("✅ Confirmed. Executing delete request...")
+
+        command = pending.get('command', '')
+        source = pending.get('source', 'agent')
+        fake_text = type('Obj', (), {'text': command})
+        fake_update = type('Obj', (), {'message': update.callback_query.message, 'effective_user': user})
+
+        if source == 'raw':
+            await self._execute_raw_and_reply(fake_update, command)
+            return
+
+        if self.agent:
+            await self._process_with_agent(fake_update, command)
+        else:
+            await update.callback_query.message.reply_text("⚠️ Agent not available.")
     
     async def _handle_set_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /model <id> - Set active AI model."""
@@ -638,6 +708,7 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         """Handle all non-command messages."""
         text = update.message.text.strip()
         user = update.effective_user
+        self._cleanup_expired_delete_confirmations()
         
         # Auth check
         if not await self._check_auth(update):
@@ -655,6 +726,17 @@ I'm your <b>Remote PC Agent</b> powered by AI.
         
         # Update session
         self._update_session(user.id)
+        session = self._get_session(user.id)
+
+        # Handle pending delete confirmation via text replies.
+        if await self._handle_delete_text_confirmation(update, text, session):
+            return
+
+        # Human-in-the-loop gate for potentially destructive delete requests.
+        confirmation_source = self._classify_delete_request_source(text)
+        if confirmation_source:
+            await self._request_delete_confirmation(update, session, text, confirmation_source)
+            return
         
         # Raw shortcuts
         if text.startswith('$') or text.startswith('>>>'):
@@ -662,7 +744,6 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             return
             
         # Check specific mode
-        session = self._get_session(user.id)
         if session['mode'] != self.STATE_NORMAL:
             await self._handle_code_flow(update, text, session)
             return
@@ -918,14 +999,14 @@ If no files found, explain why."""
         """Send response, detecting questions and splitting if needed."""
         max_len = 4000
         text = text or "✅ Done"
-        
+
         # Detect if agent is asking a question
         is_question = self._is_asking_question(text)
-        
+
         if is_question:
             # Add visual indicator that user should respond
             text = text.rstrip() + "\n\n💬 _Reply to answer..._"
-        
+
         if len(text) <= max_len:
             try:
                 await update.message.reply_text(text, parse_mode='Markdown')
@@ -939,6 +1020,122 @@ If no files found, explain why."""
                     await update.message.reply_text(prefix + chunk, parse_mode='Markdown')
                 except:
                     await update.message.reply_text(prefix + chunk)
+
+    def _delete_confirmation_ttl_seconds(self) -> int:
+        """Return TTL for delete confirmations."""
+        ttl = self.mcp.config.get('security', {}).get('delete_confirmation_ttl_seconds', 120)
+        try:
+            ttl_int = int(ttl)
+        except (TypeError, ValueError):
+            ttl_int = 120
+        return max(30, min(600, ttl_int))
+
+    def _classify_delete_request_source(self, text: str) -> Optional[str]:
+        """Classify whether a message looks like a destructive delete request."""
+        normalized = text.strip().lower()
+
+        raw_patterns = [
+            r'^\$\s*(rm|del|erase|rmdir|rd)\b',
+            r'^\$\s*powershell\s+remove-item\b',
+            r'^\$\s*remove-item\b',
+        ]
+        for pattern in raw_patterns:
+            if re.search(pattern, normalized):
+                return 'raw'
+
+        # Natural language delete intent that can lead the agent to call file deletion.
+        has_delete_verb = any(word in normalized for word in [' delete ', ' remove ', ' erase ', ' purge '])
+        has_target_hint = any(word in normalized for word in [' file', ' files', ' folder', ' directory', ' log', ' cache', '.'])
+        starts_with_delete = normalized.startswith(('delete ', 'remove ', 'erase ', 'purge '))
+
+        if starts_with_delete or (has_delete_verb and has_target_hint):
+            return 'agent'
+
+        return None
+
+    async def _request_delete_confirmation(self, update: Update, session: dict, command: str, source: str):
+        """Store a pending delete request and ask user for explicit confirmation."""
+        self._clear_pending_delete_confirmation(session)
+
+        token = secrets.token_hex(8)
+        expires_at = datetime.now().timestamp() + self._delete_confirmation_ttl_seconds()
+        self.pending_delete_confirmations[token] = {
+            'user_id': update.effective_user.id,
+            'command': command,
+            'source': source,
+            'expires_at': expires_at,
+        }
+        session['pending_delete_token'] = token
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Yes, delete", callback_data=f"deleteconfirm:{token}"),
+                InlineKeyboardButton("❌ Cancel", callback_data=f"deletecancel:{token}"),
+            ]
+        ])
+
+        await update.message.reply_text(
+            "⚠️ Delete confirmation required.\n\n"
+            "Are you sure you want to execute this delete request?\n"
+            "Reply with Yes or No, or use the buttons below.",
+            reply_markup=keyboard,
+        )
+
+    async def _handle_delete_text_confirmation(self, update: Update, text: str, session: dict) -> bool:
+        """Handle Yes/No responses for pending delete confirmations."""
+        token = session.get('pending_delete_token')
+        if not token:
+            return False
+
+        pending = self.pending_delete_confirmations.get(token)
+        if not pending:
+            session['pending_delete_token'] = None
+            return False
+
+        if datetime.now().timestamp() > pending.get('expires_at', 0):
+            self._clear_pending_delete_confirmation(session)
+            await update.message.reply_text("⏱️ Delete confirmation expired. Please request again.")
+            return True
+
+        normalized = text.strip().lower()
+        if normalized in {'yes', 'y', 'confirm', 'proceed', 'ok'}:
+            command = pending.get('command', '')
+            source = pending.get('source', 'agent')
+            self._clear_pending_delete_confirmation(session)
+
+            await update.message.reply_text("✅ Confirmed. Executing delete request...")
+            if source == 'raw':
+                await self._execute_raw_and_reply(update, command)
+            elif self.agent:
+                await self._process_with_agent(update, command)
+            else:
+                await update.message.reply_text("⚠️ Agent not available.")
+            return True
+
+        if normalized in {'no', 'n', 'cancel', 'stop', 'abort'}:
+            self._clear_pending_delete_confirmation(session)
+            await update.message.reply_text("✅ Delete request cancelled.")
+            return True
+
+        return False
+
+    def _clear_pending_delete_confirmation(self, session: dict):
+        """Clear pending delete confirmation for a session."""
+        token = session.get('pending_delete_token')
+        if token:
+            self.pending_delete_confirmations.pop(token, None)
+        session['pending_delete_token'] = None
+
+    def _cleanup_expired_delete_confirmations(self):
+        """Remove expired delete confirmations."""
+        now_ts = datetime.now().timestamp()
+        expired_tokens = [
+            token
+            for token, data in self.pending_delete_confirmations.items()
+            if now_ts > data.get('expires_at', 0)
+        ]
+        for token in expired_tokens:
+            self.pending_delete_confirmations.pop(token, None)
     
     def _is_asking_question(self, text: str) -> bool:
         """Detect if the agent response contains a question for the user."""
