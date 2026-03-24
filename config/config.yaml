@@ -6,7 +6,7 @@ agent:
   timeout: 120  # seconds
   working_dir: "${WORKING_DIR}"  # Set via environment variable
   model: "google/gemini-2.5-flash"
-  max_tool_iterations: 10  # Max ReAct tool-calling loops
+  max_tool_iterations: 25  # Max ReAct tool-calling loops
   temperature: 0.1
   max_context_messages: 20  # Per-user conversation history cap
 

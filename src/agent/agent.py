@@ -28,7 +28,7 @@ class UserContext:
     """Per-user conversation context using LangChain message types."""
 
     messages: list[BaseMessage] = field(default_factory=list)
-    max_messages: int = 20
+    max_messages: int = 30
 
     def add_user_message(self, content: str):
         self.messages.append(HumanMessage(content=content))
@@ -183,7 +183,7 @@ class OrbitAgent:
             result = await asyncio.wait_for(
                 graph.ainvoke(
                     {"messages": context.get_messages()},
-                    config={"recursion_limit": self.max_iterations * 2 + 1},
+                    config={"recursion_limit": self.max_iterations * 3},
                 ),
                 timeout=self.timeout,
             )
