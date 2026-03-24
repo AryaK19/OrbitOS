@@ -80,6 +80,10 @@ tools:
   
   files:
     max_file_size_mb: 100
+    list_cache_ttl_seconds: 20
+    max_list_limit: 100
+    max_search_results: 50
+    search_timeout_seconds: 3.0
     allowed_extensions:
       - ".txt"
       - ".py"

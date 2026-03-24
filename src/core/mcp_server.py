@@ -142,10 +142,36 @@ class MCPServer:
             return await tool.execute('write', {'path': path, 'content': content})
         
         @self.mcp.tool()
-        async def list_directory(path: str = '.') -> str:
-            """List contents of a directory."""
+        async def list_directory(
+            path: str = '.',
+            page: int = 1,
+            limit: int = 20,
+            filter: str = ''
+        ) -> str:
+            """List directory contents with pagination and optional filename glob filter."""
             tool = self.registry.get('files')
-            return await tool.execute('list', {'path': path})
+            return await tool.execute('list', {
+                'path': path,
+                'page': page,
+                'limit': limit,
+                'filter': filter,
+            })
+
+        @self.mcp.tool()
+        async def search_files(
+            path: str = '.',
+            filter: str = '*',
+            max_results: int = 50,
+            timeout_seconds: float = 3.0
+        ) -> str:
+            """Recursively search files by filename pattern with timeout and max results."""
+            tool = self.registry.get('files')
+            return await tool.execute('search', {
+                'path': path,
+                'filter': filter,
+                'max_results': max_results,
+                'timeout_seconds': timeout_seconds,
+            })
         
         @self.mcp.tool()
         async def run_python(code: str) -> str:
