@@ -99,6 +99,7 @@ class TelegramBridge:
         # Code Mode commands
         self.app.add_handler(CommandHandler("code", self._handle_code_mode))
         self.app.add_handler(CommandHandler("exit", self._handle_exit_code_mode))
+        self.app.add_handler(CommandHandler("codeexit", self._handle_exit_code_mode))
         
         # All other messages go to OpenCode
         self.app.add_handler(MessageHandler(
@@ -189,9 +190,14 @@ class TelegramBridge:
             self.agent.clear_context(user.id)
             
         await update.message.reply_text(
-            "🚀 **Starting Coding Session**\n\n"
-            "I will help you plan and execute a coding task.\n"
-            "First, please enter the **project directory** (full absolute path).",
+            "💻 **Coding Mode Activated**\n\n"
+            "I'm now in a focused coding workflow:\n"
+            "1️⃣ **Explore** — I'll read your project structure\n"
+            "2️⃣ **Plan** — I'll present a step-by-step plan\n"
+            "3️⃣ **Execute** — I'll implement changes one at a time\n"
+            "4️⃣ **Verify** — I'll test and validate\n\n"
+            "📂 First, enter the **project directory** (full absolute path).\n"
+            "Use `/codeexit` or `/exit` to leave coding mode.",
             parse_mode='Markdown'
         )
 
@@ -674,6 +680,10 @@ I'm your <b>Remote PC Agent</b> powered by AI.
 • `/session` - Session info
 • `/history` - View recent messages
 
+**Coding Mode:**
+• `/code` - Enter focused coding mode
+• `/codeexit` or `/exit` - Leave coding mode
+
 **File Commands:**
 • `/send <path>` - Send specific file
 • Or just ask: "Send me report.pdf"
@@ -792,40 +802,77 @@ I'm your <b>Remote PC Agent</b> powered by AI.
             session['project_goal'] = text
             session['mode'] = self.STATE_CODING
             
-            # Trigger initial plan
+            # Trigger initial exploration + plan
             goal = session['project_goal']
             directory = session['project_dir']
             
             await update.message.reply_text(
                 f"🎯 **Goal Set:** {goal}\n\n"
-                "🧠 **Thinking...** generating initial plan..."
+                "📂 **Exploring project...** reading files and structure..."
             )
             
             initial_prompt = (
-                f"I am starting a new task.\n"
-                f"Goal: {goal}\n"
-                f"Please create a step-by-step implementation plan."
+                f"I am starting a new coding task.\n"
+                f"**Goal:** {goal}\n\n"
+                f"Please begin with Phase 1 (EXPLORE): list the project directory, "
+                f"read key files (README, configs, etc.), then move to Phase 2 (PLAN) "
+                f"and present a numbered implementation plan for my approval."
             )
             
-            # Pass to agent with special context
-            await self._process_with_agent(
-                update, 
-                initial_prompt, 
-                working_dir=directory,
-                system_context=f"Project: {goal}\nLocation: {directory}"
-            )
+            # Use the dedicated code session processor with progress callbacks
+            await self._process_code_with_progress(update, initial_prompt, session)
             
         elif mode == self.STATE_CODING:
-            # Normal conversation but with locked context
-            goal = session['project_goal']
-            directory = session['project_dir']
-            
-            await self._process_with_agent(
-                update, 
-                text, 
-                working_dir=directory,
-                system_context=f"Project: {goal}\nLocation: {directory}"
+            # All coding-mode messages go through the dedicated code processor
+            await self._process_code_with_progress(update, text, session)
+    
+    async def _process_code_with_progress(self, update: Update, text: str, session: dict):
+        """Process a coding-mode message with intermediate step visibility."""
+        user = update.effective_user
+        import time
+        start_time = time.monotonic()
+
+        self.logger.info(f"[code][user={user.id}] Code message: {text[:80]}...")
+        await update.message.chat.send_action('typing')
+
+        # Progress callback: sends intermediate steps as Telegram messages
+        async def progress_callback(progress_text: str):
+            try:
+                await update.message.reply_text(progress_text, parse_mode='Markdown')
+            except Exception:
+                try:
+                    await update.message.reply_text(progress_text)
+                except Exception:
+                    pass
+
+        try:
+            result = await asyncio.wait_for(
+                self.agent.process_code_session(
+                    message=text,
+                    user_id=user.id,
+                    username=user.username or str(user.id),
+                    working_dir=session.get('project_dir'),
+                    project_goal=session.get('project_goal'),
+                    progress_callback=progress_callback,
+                ),
+                timeout=200,  # outer timeout with buffer
             )
+
+            elapsed = time.monotonic() - start_time
+            self.logger.info(f"[code][user={user.id}] Code response in {elapsed:.1f}s")
+
+            await self._send_response(update, result)
+
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - start_time
+            self.logger.error(f"[code][user={user.id}] TIMEOUT after {elapsed:.1f}s")
+            await update.message.reply_text(
+                "⏱️ Code session timed out. Try breaking the task into smaller steps."
+            )
+        except Exception as e:
+            elapsed = time.monotonic() - start_time
+            self.logger.error(f"[code][user={user.id}] Error after {elapsed:.1f}s: {e}", exc_info=True)
+            await update.message.reply_text(f"⚠️ Code error: {str(e)}")
     
     async def _process_with_agent(
         self,
@@ -1191,6 +1238,7 @@ If no files found, explain why."""
         commands = [
             BotCommand("start", "🚀 Start fresh"),
             BotCommand("code", "💻 Coding Mode"),
+            BotCommand("codeexit", "⏹️ Exit Coding Mode"),
             BotCommand("new", "🆕 New conversation"),
             BotCommand("clear", "🧹 Clear context"),
             BotCommand("models", "🤖 List AI models"),

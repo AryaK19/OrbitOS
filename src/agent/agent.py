@@ -21,6 +21,7 @@ from ..utils.logger import get_logger, AuditLogger
 from .providers import create_llm, AVAILABLE_MODELS
 from .tools import create_all_tools
 from .prompts import SYSTEM_PROMPT
+from .code_prompts import CODE_SYSTEM_PROMPT
 
 
 @dataclass
@@ -258,6 +259,190 @@ class OrbitAgent:
                 exc_info=True,
             )
             return f"⚠️ Error ({category}): {error_str}"
+
+    # ── Code Session Processing ──
+
+    async def process_code_session(
+        self,
+        message: str,
+        user_id: int,
+        username: str = "user",
+        working_dir: str = None,
+        project_goal: str = None,
+        progress_callback=None,
+    ) -> str:
+        """Process a coding-mode message with a dedicated prompt and progress streaming.
+
+        Uses CODE_SYSTEM_PROMPT, higher iteration limits, and fires
+        progress_callback(text) for every tool call so users see
+        intermediate steps in Telegram.
+        """
+        code_config = self.config.get("code_mode", {})
+        code_model = code_config.get("default_model", self.get_user_model(user_id))
+        code_timeout = code_config.get("timeout", 180)
+        code_max_iter = code_config.get("max_iterations", 40)
+
+        # Allow user override if they explicitly set a model
+        if user_id in self.user_models:
+            code_model = self.user_models[user_id]
+
+        self.logger.info(
+            f"[code][user={user_id}] Processing: {message[:80]}... | "
+            f"model={code_model} | dir={working_dir}"
+        )
+        start_time = time.monotonic()
+
+        context = self._get_context(user_id)
+        context.add_user_message(message)
+
+        try:
+            # Build the coding system prompt with project context
+            sys_prompt = CODE_SYSTEM_PROMPT
+            if project_goal:
+                sys_prompt += f"\n\n## CURRENT PROJECT\n**Goal:** {project_goal}"
+            if working_dir:
+                sys_prompt += f"\n**Project Directory:** {working_dir}"
+                sys_prompt += f"\n\nAlways use `{working_dir}` as the cwd for shell commands unless there's a specific reason to use another directory."
+
+            llm = self._get_or_create_llm(code_model)
+
+            graph = create_react_agent(
+                llm,
+                self.tools,
+                prompt=sys_prompt,
+            )
+
+            self.logger.info(f"[code][user={user_id}] Invoking code agent...")
+
+            result = await asyncio.wait_for(
+                self._run_code_graph_with_progress(
+                    graph, context, code_max_iter, progress_callback
+                ),
+                timeout=code_timeout,
+            )
+
+            elapsed = time.monotonic() - start_time
+
+            all_messages = result.get("messages", [])
+            input_count = len(context.get_messages())
+            new_messages = all_messages[input_count:]
+
+            response_text = self._extract_response(new_messages)
+            context.add_turn(new_messages)
+
+            tool_count = self._count_tool_calls(new_messages)
+            self.logger.info(
+                f"[code][user={user_id}] Completed in {elapsed:.1f}s | "
+                f"response_len={len(response_text)} | tool_calls={tool_count}"
+            )
+
+            return response_text
+
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - start_time
+            return (
+                f"⏱️ Code session timed out after {int(elapsed)}s. "
+                f"Try breaking the task into smaller steps."
+            )
+        except Exception as e:
+            elapsed = time.monotonic() - start_time
+            error_str = str(e)
+
+            if "function call turn" in error_str.lower() or (
+                "invalid_argument" in error_str.lower()
+                and "function" in error_str.lower()
+            ):
+                context.clear()
+                return (
+                    "⚠️ Context was reset due to a model error. "
+                    "Please resend your message."
+                )
+
+            category = self._classify_error(error_str)
+            self.logger.error(
+                f"[code][user={user_id}] {category} after {elapsed:.1f}s | error={error_str}",
+                exc_info=True,
+            )
+            return f"⚠️ Code error ({category}): {error_str}"
+
+    async def _run_code_graph_with_progress(
+        self, graph, context, max_iterations, progress_callback
+    ):
+        """Run the LangGraph agent and fire progress callbacks on tool calls."""
+        # Use astream_events to capture intermediate tool calls
+        final_result = None
+        try:
+            async for event in graph.astream_events(
+                {"messages": context.get_messages()},
+                config={"recursion_limit": max_iterations * 3},
+                version="v2",
+            ):
+                kind = event.get("event", "")
+                
+                # Fire progress on tool start
+                if kind == "on_tool_start" and progress_callback:
+                    tool_name = event.get("name", "unknown")
+                    tool_input = event.get("data", {}).get("input", {})
+                    progress_text = self._format_tool_progress(tool_name, tool_input)
+                    try:
+                        await progress_callback(progress_text)
+                    except Exception:
+                        pass  # Don't let callback errors break the agent
+
+                # Capture the final chain end result
+                if kind == "on_chain_end" and event.get("name") == "LangGraph":
+                    final_result = event.get("data", {}).get("output", {})
+
+        except Exception:
+            # If streaming fails, fall back to regular invoke
+            self.logger.warning("astream_events failed, falling back to ainvoke")
+            final_result = await graph.ainvoke(
+                {"messages": context.get_messages()},
+                config={"recursion_limit": max_iterations * 3},
+            )
+
+        if final_result is None:
+            # Fallback: direct invoke
+            final_result = await graph.ainvoke(
+                {"messages": context.get_messages()},
+                config={"recursion_limit": max_iterations * 3},
+            )
+
+        return final_result
+
+    @staticmethod
+    def _format_tool_progress(tool_name: str, tool_input: dict) -> str:
+        """Format a human-readable progress message for a tool call."""
+        icons = {
+            "run_shell_command": "🔧",
+            "list_directory": "📂",
+            "read_file": "📄",
+            "write_file": "✏️",
+            "delete_file": "🗑️",
+            "file_info": "ℹ️",
+            "run_python_code": "🐍",
+            "launch_application": "🚀",
+            "system_info": "💻",
+            "list_processes": "📊",
+        }
+        icon = icons.get(tool_name, "⚙️")
+
+        if tool_name == "run_shell_command":
+            cmd = tool_input.get("command", "...")[:80]
+            return f"{icon} Running: `{cmd}`"
+        elif tool_name == "read_file":
+            path = tool_input.get("path", "...").split("/")[-1]
+            return f"{icon} Reading: `{path}`"
+        elif tool_name == "write_file":
+            path = tool_input.get("path", "...").split("/")[-1]
+            return f"{icon} Writing: `{path}`"
+        elif tool_name == "list_directory":
+            path = tool_input.get("path", "...").split("/")[-1] or "/"
+            return f"{icon} Listing: `{path}/`"
+        elif tool_name == "run_python_code":
+            return f"{icon} Executing Python code..."
+        else:
+            return f"{icon} {tool_name}..."
 
     # ── Helpers ──
 

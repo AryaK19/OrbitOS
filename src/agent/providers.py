@@ -19,6 +19,7 @@ AVAILABLE_MODELS = [
     ("google/gemini-2.0-flash", "Gemini 2.0 Flash"),
     ("google/gemini-3-flash-preview", "Gemini 3 Flash Preview"),
     ("google/gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview"),
+    ("google/gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
 
     # OpenAI
     ("openai/gpt-4o", "GPT-4o"),

@@ -77,6 +77,7 @@ tools:
   shell:
     default_timeout: 60
     max_output_length: 4000
+    sudo_enabled: true
   
   files:
     max_file_size_mb: 100
@@ -99,3 +100,9 @@ tools:
       # Add custom app shortcuts here (overrides platform defaults)
       # Example: myapp: "/path/to/myapp"
       vscode: "code"
+
+# Code Mode Settings (activated via /code command)
+code_mode:
+  default_model: "google/gemini-2.5-pro"
+  max_iterations: 40
+  timeout: 180
