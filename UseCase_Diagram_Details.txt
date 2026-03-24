@@ -1,0 +1,84 @@
+# System Use Case Diagram Specifications
+Target Document: `SRS_Remote_Agent.tex` (Figure 3: System Use Case Diagram)
+
+This document provides the exact structural details you or a UI designer will need to build the "System Use Case Diagram" for the Remote MCP Control System. 
+
+## 1. System Boundary
+Draw a large containing box in the center of your diagram. 
+**Label at the top:** `System Boundary: Remote MCP Control System`
+
+Everything inside this box represents actions the system performs. Everything outside represents external Actors.
+
+---
+
+## 2. Primary Actors (Stick Figures outside the box)
+
+Place these actors on the **Left Side** of the system boundary:
+1. **Unauthorized User:** A random Telegram user who stumbles upon the bot.
+2. **Read-Only User:** A whitelisted user categorized under the `readonly` role in `permissions.yaml`.
+3. **Standard User:** A whitelisted user categorized under the `user` role.
+4. **Admin (Root) User:** A whitelisted user categorized under the `admin` role.
+
+Place this actor on the **Right Side** of the system boundary:
+5. **Host Operating System:** The external physical/virtual machine executing the binaries.
+
+---
+
+## 3. Use Cases (Ovals inside the System box)
+
+Draw the following ovals inside the boundary box and connect them to the actors using solid lines (associations) and dashed lines (`<<include>>` or `<<extend>>` for dependencies).
+
+### A. Authentication & Access
+* **Use Case:** Verify Telegram ID
+  * **Actor:** All Users (Unauthorized, Read-Only, Standard, Admin)
+  * **Action:** The system checks the incoming ID against the whitelist.
+* **Use Case:** Reject Connection
+  * **Actor:** Unauthorized User
+  * **Relationship:** `<<extend>>` from "Verify Telegram ID" (Only happens on failure).
+
+### B. Read-Only Operations (Telemetry & Discovery)
+* **Use Case:** Query System Telemetry (CPU, memory, active processes)
+  * **Actors:** Read-Only User, Standard User, Admin User
+* **Use Case:** Read Server Logs / Directory Trees
+  * **Actors:** Read-Only User, Standard User, Admin User
+
+### C. Standard User Operations
+* **Use Case:** Execute Safe Shell Commands (e.g., `ping`, `dir`, `echo`)
+  * **Actors:** Standard User, Admin User
+* **Use Case:** Execute Sandboxed Python Scripts
+  * **Actors:** Standard User, Admin User
+* **Use Case:** Intercept & Block Destructive Strings (Sandbox)
+  * **Relationship:** `<<include>>` from any Execution use case. (The system actively blocks `rm -rf` from a Standard User).
+
+### D. Admin Operations
+* **Use Case:** Execute Destructive/System-Modifying Commands (e.g., killing critical processes, formatting drives)
+  * **Actor:** Admin User
+* **Use Case:** Manage User Permissions (Modify YAML)
+  * **Actor:** Admin User
+
+### E. Host OS Interactions
+* **Use Case:** Commit I/O Operations (Read/Write to disk)
+  * **Actor:** Host Operating System
+  * **Connections:** Links to "Read Server Logs", "Execute Safe Shell Commands", etc.
+* **Use Case:** Spawn Subprocesses
+  * **Actor:** Host Operating System
+
+---
+
+## 4. Visual Inheritance (Lines and Arrows)
+
+1. **Generalization (Inheritance):**
+   * Draw an arrow with a hollow triangle from **Standard User** pointing up to **Read-Only User**. (This means a Standard User can do everything a Read-Only user can do).
+   * Draw an arrow with a hollow triangle from **Admin User** pointing up to **Standard User**. (An Admin can do everything a Standard User can do).
+
+2. **Associations (Solid Lines):**
+   * Connect **Read-Only User** to the "Query System Telemetry" and "Read Server Logs" ovals.
+   * Connect **Standard User** to the "Execute Safe Shell Commands" oval.
+   * Connect **Admin User** to the "Execute Destructive Commands" oval.
+   * Connect all functional ovals to the **Host Operating System** on the right side.
+
+## 5. Tool Recommendations to draw this
+You can use any of the following to quickly generate this visually based on this prompt:
+- **Draw.io (diagrams.net)**: Drag and drop standard UML shapes.
+- **Lucidchart**: Easy UML templates.
+- **Mermaid.js**: If you want to code the diagram directly into Markdown.

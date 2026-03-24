@@ -1,0 +1,73 @@
+# Data Flow Diagram (DFD) Specifications
+Target Document: `SRS_Remote_Agent.tex` (Figure 4: Data Flow Diagram)
+
+This document provides the structural details necessary to map out Level-1 Data Flow mapping for the Remote MCP Control System. It illustrates how text input from Telegram converts into code, passes through security, and alters the OS state.
+
+## 1. External Entities (Usually Drawn as Rectangles)
+1. **End User (Telegram App)**
+   * Input: Natural language query or raw `/shell` commands.
+   * Output: Terminal output blocks, success/failure summaries.
+2. **LLM Provider (e.g., Anthropic Claude / OpenAI)**
+   * External brain handling semantic evaluation.
+
+---
+
+## 2. Processes (Usually Drawn as Circles or Rounded Rectangles)
+**P1: Identity & Authentication**
+* *Function:* Validates Telegram payloads against a whitelist.
+
+**P2: Semantic Parsing (OpenCode Agent)**
+* *Function:* Constructs prompts from user input, manages memory context, and interfaces with the external LLM provider to receive JSON-RPC tool schemas.
+
+**P3: Sandbox Interceptor**
+* *Function:* Ingests raw shell commands and Python ASTs. Checks them against blacklists and strips illegal imports before allowing execution.
+
+**P4: FastMCP Execution Engine**
+* *Function:* Receives scrubbed tool schemas, invokes local system libraries (like `subprocess` or `psutil`), runs them, and captures `stdout`/`stderr`.
+
+**P5: Response Formatting Bridge**
+* *Function:* Converts raw JSON outputs and traceback exceptions into clean Telegram markdown blocks to send back off-device.
+
+---
+
+## 3. Data Stores (Usually Drawn as Open-Ended Rectangles or Horizontal Lines)
+**D1: permissions.yaml**
+* *Stores:* Authorized user IDs and their hierarchical roles (`readonly`, `user`, `admin`).
+**D2: Agent Context Memory**
+* *Stores:* The sliding window of the last 20 conversational messages used for context.
+
+---
+
+## 4. The Flow (Draw Directed Arrows Mapping the Path)
+
+### Step I: The Request
+1. **End User** $\rightarrow$ `User Input Payload (String)` $\rightarrow$ **P1: Identity & Authentication**
+2. **P1** $\rightarrow$ `Telegram ID` $\rightarrow$ **D1: permissions.yaml**
+3. **D1** (returns) $\rightarrow$ `Boolean (Is Valid) + Role Str` $\rightarrow$ **P1**
+
+### Step II: The Generation
+4. **P1** $\rightarrow$ `Authenticated Query String` $\rightarrow$ **P2: Semantic Parsing**
+5. **P2** $\rightarrow$ `Memory Lookup` $\rightarrow$ **D2: Agent Context Memory**
+6. **P2** $\rightarrow$ `Constructed Prompt (System State + Rules)` $\rightarrow$ **LLM Provider**
+7. **LLM Provider** (returns) $\rightarrow$ `JSON-RPC Tool Call Request` $\rightarrow$ **P2**
+
+### Step III: The Execution Loop
+8. **P2** $\rightarrow$ `Raw Shell String / Python Script` $\rightarrow$ **P3: Sandbox Interceptor**
+9. **P3** $\rightarrow$ `Security Flag Evaluation` $\rightarrow$ (If Destructive, throw exception back down to P5).
+10. **P3** (If Safe) $\rightarrow$ `Sanitized Code Block` $\rightarrow$ **P4: FastMCP Execution Engine**
+11. **P4** $\rightarrow$ `System Resource Allocation` $\rightarrow$ *Host Operating System / Disk* (Implied Entity)
+12. *Host Operating System* (returns) $\rightarrow$ `stdout / stderr Stream` $\rightarrow$ **P4**
+
+### Step IV: The Return
+13. **P4** $\rightarrow$ `Raw Terminal Output Payload` $\rightarrow$ **P5: Response Formatting Bridge**
+   * *Self-Correction Loop:* (If the output is a failure (`stderr`), P5 loops the raw error back to **P2** to regenerate a fix without telling the user).
+14. **P5** $\rightarrow$ `Formatted Markdown Message` $\rightarrow$ **End User**
+
+---
+
+## 5. Rendering the Diagram
+To draw this accurately, start from left to right.
+Place the **End User** and **LLM Provider** as boxes on the far left.
+Place the 5 **Processes** in chronological order across the middle.
+Place the two **Data Stores** above their respective processes (e.g., D1 above P1, D2 above P2).
+Connect them strictly following the 1-14 path arrows described above.
