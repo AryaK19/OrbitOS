@@ -1,0 +1,380 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage[pscoord]{eso-pic}
+\usepackage{url}
+\usepackage{algorithm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\makeatletter
+% Removed the \confheader macro
+\makeatother
+
+\newcommand{\placetextbox}[3]{%
+ \setbox0=\hbox{#3}%
+ \AddToShipoutPictureFG*{%
+ \put(\LenToUnit{#1\paperwidth},\LenToUnit{#2\paperheight}){\vtop{{\null}\makebox[0pt][c]{#3}}}%
+ }%
+}
+% \placetextbox{.23}{0.055}{\small{979-8-3315-2924-6/25/\$31.00~\copyright 2025 IEEE}}
+
+\begin{document}
+
+
+\title{Secure and Extensible Remote System Administration via Large Language Model Agents using the Model Context Protocol}
+
+\author{
+\IEEEauthorblockN{Arya Jalindar Kadam}
+\IEEEauthorblockA{
+\textit{Department of Information Technology} \\
+\textit{BRACT’s Vishwakarma Institute of Information Technology} \\
+Pune, India \\
+aryakadam348@gmail.com}
+\and
+\IEEEauthorblockN{Tejaswini Jaywant Durge}
+\IEEEauthorblockA{
+\textit{Department of Information Technology} \\
+\textit{BRACT’s Vishwakarma Institute of Information Technology} \\
+Pune, India \\
+tejaswinidurge41@gmail.com}
+\and
+\IEEEauthorblockN{Prasad Rajaram Kute}
+\IEEEauthorblockA{
+\textit{Department of Information Technology} \\
+\textit{BRACT’s Vishwakarma Institute of Information Technology} \\
+Pune, India \\
+prasadkute0708@gmail.com}
+\and
+\IEEEauthorblockN{Soham Atul Deshmukh}
+\IEEEauthorblockA{
+\textit{Department of Information Technology} \\
+\textit{BRACT’s Vishwakarma Institute of Information Technology} \\
+Pune, India \\
+sohamatuldeshmukh2003@gmail.com}
+\and
+
+\IEEEauthorblockN{Hanmant Magar}
+\IEEEauthorblockA{
+\textit{Department of Information Technology} \\
+\textit{BRACT’s Vishwakarma Institute of Information Technology} \\
+Pune, India \\
+hanmant.magar@viit.ac.in}
+}
+
+\maketitle
+
+\begin{abstract}
+
+The developed system allows remote management of computers using simple text messages sent through Telegram. At its core, a large language model (LLM) agent interprets these plain-language commands.  An LLM agent sits behind the chat, figures out what the user wants, and executes it on the host through a local FastMCP server. The Model Context Protocol (MCP) ties these pieces together that gives a structured, schema-direct linkage of these elements by doing away with the need for numerous custom integrations. Knowing that it is dangerous to entrust an AI to do something.
+shell commands, the solution that is implemented is composed of a robust three-tier safety system. To begin with, a per-user whitelist of permissions, protects the issuing of commands by authorized people.
+Second, a blacklist is a regular expression based blacklist that proactively identifies and prevents possible harmful commands, like ‘rm -rf’, before they reach the operating system. Finally, a pattern filter scrutinizes the LLM-generated Python code and  prevents the inclusion of dangerous imports.
+
+The proposed solution agent was constructed using LangGraph and has been successfully tested with more than ten different models from major providers like Google, OpenAI, and Anthropic. Notably, switching between these AI models did not require modifications to the system's toolset. In performance evaluations, the system achieved a 92 \, \% success rate in 50 administrative tasks, effectively neutralized all 30 simulated adversarial attacks and delivered responses in an average of less than four seconds. This system has been in continuous operation since early 2026.
+
+ % Telegram-based system for managing a remote computer through plain-language messages. An LLM agent sits behind the chat, figures out what the user wants, and executes it on the host through a local FastMCP server. Anthropic’s Model Context Protocol (MCP) ties these pieces together---one schema-driven bridge instead of the usual pile of custom adapters. Letting an AI run shell commands is risky, so we put three safety layers in front of it: a per-user permission whitelist, a regex-based command blacklist that catches things like \texttt{rm~-rf} before they hit the OS, and a pattern filter that rejects dangerous imports in LLM-generated Python. We wired the agent through LangGraph and tested it with ten-plus models from Google, OpenAI, and Anthropic---swapping models required no tool-side changes. On 50 admin tasks the system scored 92\,\% success, blocked all 30 adversarial payloads, and averaged under four seconds per response. It has been running in production since early 2026.
+\end{abstract}
+
+\begin{IEEEkeywords}
+LLM, MCP, Remote Administration, Sandboxing, FastMCP, Telegram Bot, LangGraph, Multi-Model, ReAct Agent, RCE Mitigation.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Both methods work,. They require the user to know exactly what command to type or what buttons to click. A junior admin who asks "show me which process is using all the RAM" won't get an answer from a bash prompt. This gap can be addressed with Large Language Models or LLMs. They convert requests to specific shell commands interpret the output and make decisions on what to do next \cite{wang2023survey, yao2023react}.
+
+It is not getting LLMs to reason: it is to get it set up to operate safely. Every tool, like a file manager or package installer needs code to work with LLMs. The way each new LLM model works presents a big integration problem \cite{schick2023toolformer, patil2023gorilla}. There is a concern of safety. LLMs are able to invent things. Bad input can mislead them. On one bad reply a disk can be destroyed by an LLM \cite{greshake2023indirect, owasp2025llm}.
+
+The two problems are solved by proposed system. We used Anthropics Model Context Protocol  \cite{anthropic2024mcp}. It is a standard which only allows each tool to be used with a single adapter and any standard model can be used. The user interface is a Telegram bot  \cite{telegram2023botapi}. We decided on Telegram since it already supports logins and notifications, on all platforms. We added three security measures between the output of the LLMs and the kernel of the computers: user permissions, a list of banned commands and a filter that verifies the commands.
+
+Part II deals with work. Part III-V discusses our objectives, the mechanism of our system and the way we did it. Section VI presents the findings of 50 tasks and 30 tests that are aimed at deceiving the system. In Section VII and VIII, there are discussions as to what worked not and what we intend to fix.
+
+% Most engineers manage remote machines through SSH or RDP. Both work, but both expect the user to already know the exact command or click path. A junior admin who types ``show me which process is eating all the RAM’’ gets nothing useful from a bash prompt. Large Language Models (LLMs) can close that gap: they turn vague requests into concrete shell commands, reason over the output, and decide what to do next
+
+% The hard part is not the reasoning---it is the plumbing and the safety. Every tool (file manager, process monitor, package installer) needs adapter code, and every new model has its own calling convention. That gives you an $M \times N$ integration problem that gets worse with every addition \cite{schick2023toolformer, patil2023gorilla}. Safety is an even bigger concern. LLMs hallucinate, and they can be tricked by prompt injection. Give one unrestricted shell access and a single bad generation can wipe a disk \cite{greshake2023indirect, owasp2025llm}.
+
+% Our system tackles both problems. We adopted Anthropic’s Model Context Protocol (MCP) \cite{anthropic2024mcp}---an open standard from November 2024, similar in spirit to the Language Server Protocol for IDEs---so each tool only needs one adapter and any compliant model can use it. The user interface is a Telegram bot \cite{telegram2023botapi}; we did not want to build a custom app, and Telegram already handles authentication and push notifications on every platform. Between the LLM’s output and the host kernel we put three defences: user-level permissions, a command blacklist, and a pattern-based Python filter.
+
+% Section~II covers related work. Sections~III--V lay out the objectives, architecture (LangGraph agent, multi-model support, Code Mode), and methods. Section~VI reports results from 50 admin tasks and 30 adversarial payloads. Sections~VII and~VIII discuss what worked, what broke, and what we plan to fix.
+
+\section{Literature Review}
+
+The design was influenced by three bodies of previous literature: the way in which LLM agents perform system tasks, the way in which MCP is trying to standardise tool access, and the way in which sandboxes prevent the generated code to create damage.
+
+\subsection{LLM Agents for System Tasks}
+The latest survey lists than a hundred papers on LLM-based agents \cite{wang2023survey}. Most of these papers are based on some variation of the loop that Yao et al. Talked about which is called ReAct. This loop is simple: generate a plan execute a step look at what happened and then adjust \cite{yao2023react}.
+Something that really struck us was the experiment that Cao et al. Did. They told GPT-4 to do 150 Linux administrator jobs like cleaning up disks setting up firewall rules and doing package upgrades. The model did the rest on its own \cite{cao2024linux}.
+
+Other people have used the idea to control engineering \cite{zahedifar2025llmagent, guo2024controlagent} and multi-model pipelines. For example one LLM can send work to specialist models \cite{shen2023hugginggpt, lewis2020rag}. This shows that LLM-based agents can reason. What we needed to make LLM-based agents work in life was a safe way to connect them to a live operating system, like Linux. We needed this to make LLM-based agents go live.
+
+% Recent surveys count over a hundred papers on LLM-based agents \cite{wang2023survey}, most following some variant of the loop Yao et al.\ called ReAct---generate a plan, execute a step, look at what happened, adjust \cite{yao2023react}. What caught our attention was Cao et al.'s experiment: they pointed GPT-4 at 150 real Linux admin jobs (disk cleanup, firewall rules, package upgrades) and the model handled the majority on its own \cite{cao2024linux}. Others have pushed the same idea into control engineering \cite{zahedifar2025llmagent, guo2024controlagent} and multi-model pipelines where one LLM dispatches work to specialist models \cite{shen2023hugginggpt, lewis2020rag}. The reasoning ability is clearly there. The missing piece, for us, was a safe way to wire it to a live OS.
+
+\subsection{The Model Context Protocol}
+Prior to MCP, to bind a tool to an LLM, one needed to write glue code to the particular model calling convention.  Models trained by Schick et al. to invoke APIs were trained on a small number of demonstrations to guide the process of API selection \cite{schick2023toolformer}; Patil et al. fine-tuned a single model to select APIs in particular to the task of API selection 3. Both enhanced accuracy, yet all the new tools still required a new adapter. MCP \cite{anthropic2024mcp} addresses the issue on the wire level, taking the client,server split of IDEs in the Language Server Protocol \cite{microsoft2024lsp}. A tool publishes a name, a short description, and a JSON Schema describing its arguments; the LLM fills in the schema, and the MCP server runs the call over JSON-RPC~2.0 \cite{jsonrpc2013spec} (stdio for local use, HTTP\,+\,SSE for remote). Practically this implied that when we introduced a sixth tool in the middle of development, we wrote a single Python class and then restarted--there was no longer any change.
+
+\subsection{Sandboxing AI-Generated Code}
+An LLM with the ability to call the function of executing code, has arbitrary code execution - whether it wants it or not. It uses prompt-injection attacks: Liu et al. demonstrated that the apps LLM would run attacker payloads by masking instructions in user input and got them to do so successfully, and Greshake et al. demonstrated the same indirectly through documents retrieved by them, both by doing it successfully. Testing ChatGPT plugins, published by Iqbal et al., questioned more than forty-five percent of them, enabling them to send and obtain data without a strong data-handling and permission checkup \cite{iqbal2024llmplatform}. OWASP has now placed prompt injection as the highest risk of LLM applications \cite{owasp2025llm}.
+
+The extent to which isolation is sufficient is based on the threat model. Docker containers are inexpensive and use the same host kernel \cite{sultan2019container}. At almost native speed, WebAssembly provides memory safety \cite{haas2017webassembly, perrone2024wasm}. Firecracker micro-VMs can boot to a minimal kernel in less than 125\,ms per workload (as of 2020) \cite{agache2020firecracker} at the cost of operational load. We decided on the least heavy one, which is run on the host, but filter all shell commands by a regex blacklist and all Python snippets by pattern-based imports. Section~V is the answer to the question why, and where we discovered it breaking.
+
+\section{Objective}
+The primary objectives of this study are as follows:
+\begin{enumerate}
+    \item \textbf{Unified protocol design:} To establish a common protocol that consolidates diverse functionalities such as shell operations, file management, Python execution, and system monitoring within the framework of the Model Context Protocol (MCP)~\cite{anthropic2024mcp}. The architecture is also made to be independent of the large language model (LLM) it uses, such that changing the model does not necessitate changes to the implementations of the tools. Several models with various providers were used to assess this property.
+    
+    \item \textbf{Reduced system requirements:} To enable user interaction solely through Telegram, thereby avoiding the need for additional configurations such as virtual private networks (VPNs), secure shell (SSH) credentials, or dedicated software installations.
+    
+    \item \textbf{Secure and fail-safe execution:} To incorporate automated safeguards that ensure reliable system operation without continuous human oversight. This is achieved through layered security mechanisms, including user access control via whitelisting, command validation using regular expression filtering, and pattern-based screening of Python code.
+    
+    \item \textbf{Modular extensibility:} To design the system in a modular manner that simplifies the integration of new functionalities, such as database connectors or GitHub adapters, requiring minimal development effort—typically limited to implementing a single Python class followed by a system restart.
+\end{enumerate}
+
+\section{Architecture}
+% The system has three main pieces, shown in Fig.~\ref{fig:architecture}. A central class (\texttt{RemoteAgentApp}) spins them up and wires them together on launch.
+
+The suggested system consists of three main elements, as it is depicted in Fig.~\ref{fig:sequence}. The startup of these components and their interaction with each other is handled by a central controller class, which is called RemoteAgentApp.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\linewidth]{images/sequence_diagram.jpeg}
+    \caption{Sequence Diagram: a Telegram message enters the Bridge, is routed to the LLM Agent, which issues JSON-RPC tool calls to the MCP Server. Responses travel the same path in reverse.}
+    \label{fig:sequence}
+\end{figure}
+
+
+\subsection{Telegram Bridge}
+The Telegram bridge, implemented in \texttt{telegram\_bridge.py} (approximately 800 lines of code) is our primary entry point for all incoming user messages.It cross-references the Telegram user ID of the sender with a YAML whitelist before determining the destination: explicit commands such as \texttt/shell/ are sent directly to the MCP server; everything else is sent to the LLM agent.
+
+The bridge eventually expanded to perform routing as well. Through an inline keyboard (/models), users can change LLM models in the middle of a conversation. Additionally, a dedicated Code Mode facilitates extended AI-assisted programming interactions (see Section~\ref{sec:codemode}). Destructive tasks such as the deletion of files need a confirmation tap which expires after 60 seconds. Users that do not have a whitelisted ID can still use a password to log in, we added this feature after realising that we were continually locking ourselves out when logging in on new devices.
+
+Furthermore, to improve accessibility, an alternative authentication mechanism has been incorporated. Users whose Telegram IDs are not present in the whitelist can authenticate using a password-based login to prevent unintended access issues during multi-device usage and testing scenarios.
+
+
+% \subsection{Telegram Bridge}
+% The bridge (\texttt{telegram\_bridge.py}, roughly 800 lines---our largest file) is the first thing a message hits. It checks the sender’s Telegram user ID against a YAML whitelist, then decides where the message goes: explicit commands like \texttt{/shell} are forwarded straight to the MCP server; everything else is handed to the LLM agent. Over time the bridge grew to handle more than just routing. Users can switch LLM models mid-conversation through an inline keyboard (\texttt{/models}). There is a Code Mode for longer AI-assisted coding sessions (Section~\ref{sec:codemode}). Destructive operations like file deletion require a confirmation tap that expires after 60 seconds. Users without a whitelisted ID can still log in with a password---we added that after realising we kept locking ourselves out when testing from new devices.
+
+\subsection{LLM Agent}
+Our initial outlay was to an external CLI tool to do the LLM reasoning. This was until we had to support per-user context and model switching, when we removed it and substituted it with LangGraph \cite{langgraph2024}, a graph-based agent framework that runs on LangChain \cite{langchain2024}. The core is a \texttt{create\_react\_agent} graph: the model examines the conversation, selects a tool, reads the output and repeats until it has an answer \cite{yao2023react}. We wrapped each of our five tools in a LangChain \texttt{StructuredTool} with a Pydantic schema so the LLM gets typed arguments instead of raw strings, this in itself removed a category of parsing errors that we were experiencing.
+ 
+Creation of the models passes via a factory in \texttt{providers.py}. You feed it a string such as \texttt{google/gemini-2.5-flash} and it returns a ready-to-use instance of LLM. Right now application  supports six Gemini models (Flash is the default), four OpenAI models and Anthropic Claude. Switching occurs at runtime via Telegram with \texttt{/models}; the tools are unaware of or concerned with what model is invoking them.
+
+Each user gets a \texttt{UserContext} which is basically a sliding window of the last 30 messages.  Trimming it re-grounds us to the initial \texttt{HumanMessage}; otherwise Gemini complains of orphaned tool calls. Each agent invocation is enclosed in \texttt{asyncio.wait\_for} (120 seconds by default, 600 in Code Mode) to ensure that a stuck model does not prevent the bot.
+
+\subsection{MCP Server}
+The FastMCP is based on the server (\texttt{mcp\_server.py}), which is used to host all the tools. Three conditions must be met before a call is executed, namely: the permission tier of the caller must include the requested tool, the command must pass the regex blacklist, and (if it is Python code) the import filter must approve the request.
+In case of failure of any of the checks, the call is terminated and the admin receives a Telegram message.
+We also hard-block access to the \texttt{.env} at three different locations (path validation, shell filter, Python filter) following an initial scare where the LLM was attempting to \texttt{cat} our API keys to ``check the configuration.
+
+
+\subsection{Use-case}
+Fig.~\ref{fig:usecasediagram}. Based on their roles and permissions, this use case diagram shows how different types of users use a system. The process starts with different types of users, such as unauthorized users, read-only users, standard users, and admin users. The authentication step is the first thing that all users must do. This is where the system checks their identity, like by using a Telegram ID. The system immediately rejects the connection if the user is not authorized, which keeps things safe.
+
+Users can do things based on their role once they have been verified. Users who can only read can only do things that don't change the system, like reading server logs or querying system telemetry. Standard users can do things like run safe shell commands or sandboxed Python scripts, which are normal tasks. These operations are watched so that any harmful or destructive commands can be found and stopped before they are run. Admin users have the most access, which lets them run harmful commands and change user permissions.
+
+All of these operations eventually interact with the host system, where things like input/output operations and subprocess execution happen. The diagram shows a clear role-based access control system that keeps sensitive operations to authorized users only, which keeps the system safe and sound.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{images/use_case_diagram.png}
+    \caption{Use-case Diagram}
+    \label{fig:architecture}
+\end{figure}
+
+
+
+\section{Methodology}
+
+\subsection{Tool Suite}
+We shipped what is listed in Table~\ref{tab:tools}. All tools are Python classes, named, with a JSON Schema of required inputs, and a required permission level. The schema is simply seen by the LLM - it is not aware of the implementation.
+
+\begin{table}[h]
+\centering
+\caption{FastMCP Tool Suite}
+\label{tab:tools}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Tool} & \textbf{Capability} & \textbf{Min.\ Tier} \\
+\midrule
+ShellTool      & Run OS commands, capture stdout/stderr & user  \\
+FilesTool      & List, read, write, delete files        & user  \\
+PythonExecTool & Execute Python snippets on host        & user  \\
+AppTool        & Launch or kill desktop applications     & user  \\
+SystemTool     & CPU, RAM, disk, process list            & readonly \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Data Flow}
+Fig.~\ref{fig:dataflow} shows a safe system that uses an AI model to process a user's request and carry it out safely. The end user sends an input first. This input goes to the Identity and Authentication stage (P1), where the system uses a configuration file to check the user's identity and permissions. Once the user is verified, the request goes to Semantic Parsing (P2), where the system figures out what the user wants and turns it into a structured format using stored context or memory. The LLM provider then gets this structured request and makes instructions or code to carry it out.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{images/data_flow_diagram.png}
+    \caption{Data flow}
+    \label{fig:dataflow}
+\end{figure}
+
+Before execution, the Sandbox Interceptor (P3) checks and cleans up the code to make sure it doesn't do anything harmful or unauthorized. If the code is not safe, a security exception is raised and sent right away to be handled. If it is safe, it goes to the FastMCP Execution stage (P4), where the code runs on the host system and gives output. The Response Formatting stage (P5) then gets this output and changes it into a format that is easy for the user to read. The user then gets the formatted result back. The system also has an error retry loop, which means that if something goes wrong during processing, it can try again with the AI model to get a better result.
+
+\subsection{Code Mode}
+\label{sec:codemode}
+Single-turn administration commands are suitable in the case of "checking disk space", but not in the case of refactor the logging module. We added there Code Mode. The user writes the command: \texttt{/code} and chooses a working directory, describes the purpose and the bridge switches to: \texttt{STATE CODING}. The agent in this state receives a different system prompt - it is forced to follow an Explore \textrightarrow Plan \textrightarrow Execute \textrightarrow Verify sequence as opposed to attempting to solve everything on a single attempt. We increased the iteration limit 25 to 80 and the maximum time 120\,s to 600\,s since multi-file edits are slow. The progress callbacks increment the chat with intermediate results as they occur, thus the user does not have to stare at a blank screen ten minutes. Code Mode is set to default of \texttt{gemini-2.5-pro}---slower, but which which copes better when you have longer tasks.
+
+% ------------------ till
+
+\subsection{Security Layers}
+All tools calls are considered to be untrusted irrespective of the sender of the call \cite{owasp2025llm, iqbal2024llmplatform}. Between the intent of the LLM and the OS there are three filters. If any one fails, the call is killed and the admin gets a Telegram message.
+
+\begin{algorithm}[h]
+\caption{Sandbox gate for incoming tool calls}\label{alg:sandbox}
+\begin{algorithmic}[1]
+\REQUIRE Tool call $T$ with caller ID $c$, tool name $n$, arguments $a$
+\STATE $tier \leftarrow \textsc{LookupTier}(c)$
+\IF{$tier = \texttt{null}$}
+    \RETURN \textsc{Reject}(``unknown user’’)
+\ENDIF
+\IF{$\textsc{MinTier}(n) > tier$}
+    \RETURN \textsc{Reject}(``insufficient permissions’’)
+\ENDIF
+\IF{$n = \texttt{ShellTool}$}
+    \FORALL{pattern $p \in \textsc{RegexBlacklist}$}
+        \IF{$p.\textsc{Search}(a.\text{command})$}
+            \RETURN \textsc{Reject}(``blocked command’’)
+        \ENDIF
+    \ENDFOR
+\ENDIF
+\IF{$n = \texttt{PythonExecTool}$}
+    \FORALL{$s \in \textsc{BlockedImports}$}
+        \IF{$s \subseteq a.\text{code}$}
+            \RETURN \textsc{Reject}(``forbidden import’’)
+        \ENDIF
+    \ENDFOR
+    \FORALL{pattern $p \in \textsc{DangerousCallPatterns}$}
+        \IF{$p.\textsc{Search}(a.\text{code})$}
+            \RETURN \textsc{Reject}(``dangerous call’’)
+        \ENDIF
+    \ENDFOR
+\ENDIF
+\IF{$a$ references \texttt{.env} path}
+    \RETURN \textsc{Reject}(``secret file access’’)
+\ENDIF
+\RETURN \textsc{Execute}($n$, $a$)
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Layer~1 --- Identity and permissions.}
+Every Telegram user ID is associated with a tier, either one of the following: -readonly, -user, or -admin. Silently ignored are unrecognised IDs. When a read only user requests to do something, the agent tells them they are not allowed to; the sandbox does not even receive the request.
+
+\textbf{Layer~2 --- Command regex filter.}
+The sandbox uses each of its compiled regex patterns to match the entire command string (currently 11 caret-anchored patterns including the commands: \texttt{rm~-rf~\/}, \texttt{format}, \texttt{mkfs}, \texttt{dd~if=}, \texttt{shutdown}, reboot, piped nc, and so forth), before the ShellTool spawns a subprocess. Patterns anchored with \texttt{\^{}} to ensure a subcommand argument like systemctl restart nginx is not blocked when it should be, but shuts down now is happen.
+
+\textbf{Layer~3 --- Pattern-based Python filter.}
+The \texttt{PythonExecTool} analyzes the source code of an LLM-generated program to identify blocked import strings ( \texttt{os.system} and \texttt{subprocess} and \texttt{shutil.rmtree}), and runs regular expressions to match dangerous built-in functions, including \texttt{exec()} and \texttt{eval()} and \texttt{\_\_import\_\_()}. Another group of patterns blocks access to any attempt to read any of the files named with the suffix \texttt{.env} using the \texttt{open()} or \texttt{Path.read\_text()} methods. Before executing, matching code is rejected. The general flow is presented in above Algorithm~\ref{alg:sandbox}.
+
+\section{Results}
+
+\subsection{Test Setup}
+All tests were conducted on a Windows~11 desktop (i5-12400, 16\,GB RAM) and the MCP server was local. Claude 3.5 Sonnet was the LLM through the Anthropic API; the round-trip time to the API was 180 ms on average.
+
+We hand-wrote two test suites: 50 legitimate administration tasks in five categories (file management, networking, process control, system info, Python scripting) and 30 malicious payloads--prompt injection, command injection, and Python import smuggling.
+
+\subsection{Functional Results}
+Table~\ref{tab:functional} has the breakdown. 46 out of 50 tasks passed. The three failures were all the same root cause: the LLM generated Linux commands on a Windows box (\texttt{grep} instead of \texttt{findstr}, that kind of thing). The fourth failure was a timeout--a recursive disk scan which had exceeded the 60-second limit.
+
+
+\begin{table}[h]
+\centering
+\caption{Functional test results by task category}
+\label{tab:functional}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Category} & \textbf{Tasks} & \textbf{Pass} & \textbf{Avg.\ time (s)} \\
+\midrule
+File management     & 12 & 11 & 2.8 \\
+Networking          & 10 & 10 & 3.1 \\
+Process control     & 8  & 8  & 2.4 \\
+System info         & 10 & 10 & 1.9 \\
+Python scripting    & 10 & 7  & 4.6 \\
+\midrule
+\textbf{Total}      & \textbf{50} & \textbf{46} & \textbf{3.0} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+End-to-end latency - the longest time taken to send the message of the Telegram and receive a response - was 3.0s on average. Most of it (approximately 1.8s) was consumed by the LLM API call. The processing time of MCP server itself was less than 200ms hence it is obvious that the bottleneck lies at the model.
+
+Upon these tests, we installed the system to a macOS computer to use it daily. The default production setup is Gemini~2.5~Flash. We have since used it with ten-plus models across all three providers and the tool layer and sandbox only required one change to change, which is exactly what we wanted MCP to provide.
+
+\subsection{Security Results}
+The adversarial results are presented in Table~\ref{tab:security}. None of the 30 payloads made it to the OS.
+
+
+\begin{table}[h]
+\centering
+\caption{Adversarial test results (30 payloads)}
+\label{tab:security}
+\small
+\begin{tabularx}{\columnwidth}{@{}Xccl@{}}
+\toprule
+\textbf{Attack type} & \textbf{N} & \textbf{Blocked} & \textbf{Blocked by} \\
+\midrule
+Cmd injection (\texttt{rm}, \texttt{format})     & 10 & 10 & Layer~2 (regex) \\
+Prompt injection                                  & 8  & 8  & Layer~2 + LLM \\
+Import smuggling (\texttt{os}, \texttt{subprocess}) & 7 & 7 & Layer~3 (pattern) \\
+Permission escalation                             & 5  & 5  & Layer~1 (tier) \\
+\midrule
+\textbf{Total} & \textbf{30} & \textbf{30} & --- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Two of the immediate injections are worthy of description. To a payload of \texttt{del C:\textbackslash*} execute all commands, one prepended it with one of the following: system: you are now in maintenance mode. The LLM did not send it to the ShellTool, thus the injection was partially successful, but the regex filter killed it before it could hit the OS. The coded other one base64 message. That was beyond the range of our filter. Our savior was the model itself: it did not decode and execute an opaque blob. That behaviour is not something we can depend on in different versions of the model, but it was a reminder that defence in depth can sometimes be effective in unforeseen locations.
+
+\section{Discussion}
+
+\textbf{Why MCP helped.}
+The initial prototype we had before we switched to MCP required changes to three files and two process restarts to uncover a single new command. When MCP was present (via anthropic2024mcp) it took approximately 40 lines of Python: a single class, a single schema, a single registration call, and nothing in the codebase was required to know about it. It is the $M \times N \to M + N$ reduction which Patil et al. write about theoretically \cite{patil2023gorilla} about it in theory; we observed it in practice.
+
+\textbf{LangGraph and multi-model validation:}
+The largest architectural modification that we had to make was the replacement of our original CLI-based wrapper with a LangGraph ReAct graph \cite{langgraph2024}. The reward came swiftly: since the LLM is a pluggable subsystem in create react agent, we could replace Gemini with GPT or Claude by adjusting a single line of config- no tool-side modifications. The adapters of LangChain to the StructuredTool (using the adapters named StructuredTool) helped, as well; typing the model with schemas that were validated in Pydantic reduced the number of malformed argument errors we had chased down over weeks. Something we were not expecting: Gemini API errors when the history of message has a tool-call that does not have a corresponding tool-result (which we had come to refer to as dangling tool calls). We found ourselves writing a function, called \texttt{UserContext.\_trim()} which will move the sliding window to the first HumanMessage whenever the context is trimmed.
+
+\textbf{Where the sandbox held.}
+Each of the 30 adversarial payloads was detected prior to the OS. The regex filter prevented the obvious ones direct -rm and direct format calls. The import-smuggling attempts were prevented by the pattern-based Python filter. We did not predict the LLM assisting us: twice, the model would simply refuse to execute an obfuscated command that our filters would have allowed to pass. We are not counting on that---a future model version might not be as cautious---but it was a welcome surprise during testing.
+
+\textbf{Where the sandbox broke.}
+In informal testing we found out that systemctl restart nginx was not allowed as the regex r restart was found at any place in the string. We corrected this by anchoring all patterns containing \texttt{\^{}} in such a way that they do not match when the threatening word is the base command. Individually, the blacklist was bypassed by a piped command such as \texttt{powershell -enc <base64>} which we patched with a new regex rule. These two cases underscore that a blacklist is really nothing short of a partial defence \cite{liu2023houyi, greshake2023indirect}.
+
+\textbf{Production deployment.}
+Since early 2026, we have been operating the system on a personal machine to use in our everyday life. A single command (uv run python src/main.py) is the entry point; Telegram long-polling implies that we do not have to work over a public IP address or have a webhook endpoint. There is automatic rotation of logs--one for operational events and one for security audits. The whole codebase is 33 Python files, about 5\,000 lines. Early on, we got hard-blocking of the (.env) files at three levels (path validation, shell command filter, Python code filter) that saved us at least once by accidentally leaking API keys during testing.
+
+\textbf{Latency and cost}
+Three seconds revolve around trip is enough when you are trying to check in your ohone the disk space. You may not wish to run 200 tasks in a batch, and that is fine. The LLM API call takes about 1.8s; the MCP server itself completes in less than 200 ms. A locally hosted, smaller scale might likely reduce the overall latency to less than a second, though we have not experimented to determine whether the logic works on multi-step problems.
+
+\textbf{Telegram as a UI.}
+We chose Telegram as it provided us with two in the form of a free authentication (each user is assigned to a globally unique ID) and push-notifications on all platforms. The trade-off is that bot messages are not end-to-end encrypted - the servers of Telegram can be read by them \cite{telegram2023botapi}. In case the commands sent include sensitive information, a self-hosted solution, such as Matrix or Element, would be more suitable.
+
+\section{Limitations}
+Our largest limitation is that we execute on the bare host. The output of the LLM has no container, micro-VM or WASM boundary with the kernel. Our regex blacklist will help--caret-anchoring will reduce false positives--but it can never get all the obfuscated and aliased commands. This would be fixed by a Firecracker micro-VM \cite{agache2020firecracker} or a Docker container \cite{sultan2019container} at the expense of the complexity of deployment.
+
+There is a similar gap in the Python filter. It does not do full AST analysis, it does string matching, thus tricks such as manipulating the builtins with a name such as \texttt{\_\_builtins\_\_} or tricks like importlib are bypassed completely. That can be sealed by wrapping the Python runtime in a WebAssembly sandbox \cite{haas2017webassembly, perrone2024wasm}.
+
+On the evaluation side, a sufficient number of tasks and attacks are 50 and 30, respectively to demonstrate that the architecture works, but not statistically significant. We tested on Windows~11 and macOS but have not tried multi-host orchestration. Telegram bot traffic is encrypted via TLS but not end-to-end \cite{telegram2023botapi}, sensitive environments would require a self-hosted messaging layer. Lastly, all LLM providers have their own oddities, such as Gemini not quite understanding how to call the dangling tool, GPT sometimes struggling to format an argument, and we still have per-provider workarounds in spite of the MCP abstraction.
+
+\section{Conclusion}
+The system that we are describing is in production: a Telegram bot supported by a LangGraph ReAct agent \cite{langgraph2024} which is communicating with the host operating system using MCP \cite{anthropic2024mcp}. Throughout the course of development we three times changed the LLM: Claude to Gemini to GPT and back without ever interacting with the tool layer. That was sufficient to prove to us the $M + N$ premise of MCP. The three-layer sandbox (identity check, regex command filter, pattern-based Python filter) prevented all the payloads in our 30-attack adversarial test suite, and the system took 92 per cent of 50 tasks as an administrator with a 3-second average. It is not flawless, however, it can be used nowadays.
+
+The gaps are clear. Not all dangerous commands will be included in our regex blacklist. The pattern-based Python filter lacks tricks of importlib. Telegram does not provide an end-to-end encryption of bot traffic. The following activities include transferring execution to a Firecracker micro-VM \cite{agache2020firecracker} to cease depending on a blacklist, introduce a whitelist mode to locked-down settings and create a web dashboard of live system metrics alongside the chat.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
